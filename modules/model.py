@@ -7,6 +7,8 @@ from image_embedding import WeightedImageEmbedding
 from attack import GaussianNoiseAttack
 
 
+# TextEmbeddingModule -> DWTModule -> ImageEmbeddingModule -> AttackModule
+# Reverse: AttackModule -> ImageEmbeddingModule -> DWTModule -> TextEmbeddingModule
 class Stego(nn.Module):
     def __init__(self, n_bits, channels, width, height):
         super(Stego, self).__init__()
@@ -52,6 +54,7 @@ if __name__ == "__main__":
     # read an sample host image
     from PIL import Image
     from torchvision import transforms
+
     host_image_file = Image.open("../data/train/host.jpg")
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
@@ -64,3 +67,5 @@ if __name__ == "__main__":
 
     predicted_text = model(secret_text, host_image)
     print(predicted_text)
+
+# pop up the image using PIL from Image

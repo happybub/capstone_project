@@ -17,6 +17,9 @@ class AttackModule(nn.Module):
 
 
 class GaussianNoiseAttack(AttackModule):
+    """
+    Add Gaussian noise to the input image
+    """
     def __init__(self, mean=0, std=0.1):
         super().__init__()
         self.mean = mean
@@ -25,3 +28,14 @@ class GaussianNoiseAttack(AttackModule):
     def forward(self, image):
         noise = torch.randn_like(image) * self.std + self.mean
         return image + noise
+
+
+class NoneAttack(AttackModule):
+    """
+    A dummy attack module that does nothing.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, image):
+        return image
