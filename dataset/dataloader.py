@@ -50,14 +50,24 @@ def unzip_dataset(zip_path, extract_to):
         zip_ref.extractall(extract_to)
         print(f"Files extracted to {extract_to}")
 
-def get_dataset(name, config_map):
+def get_dataset(name, dataset_folder, config_map):
     """
     get the dataset map, which contains the train, val, and test dataset
-    config_map keys include:
-    - DATA_ROOT
+
+    :param name: type of the dataset, 'train' or 'test'
+    :param dataset_folder: Path to the dataset folder
+    :param config_map: Config map,
+                     - DATA_ROOT root of the dataset
     """
     data_root = config_map["DATA_ROOT"]
-    return StegoDataset(os.path.join(data_root, name))
+    path = os.path.join(data_root, name)
+    if not os.listdir(path):
+        print("Preparing to download the dataset...")
+        data_path = os.path.join(data_root, name + ".zip")
+        download_dataset(data_path, name)
+        unzip_dataset(data_path, path)
+
+    return StegoDataset(os.path.join(data_root, name, dataset_folder))
 
 
 def get_dataloader(config_map):
@@ -89,5 +99,14 @@ def get_dataloader(config_map):
     }
 
 if __name__ == "__main__":
-    download_dataset("../data/train.zip", "train")
-    unzip_dataset("../data/train.zip", "../data/train")
+    config_map = {
+        "DATA_ROOT": "../data",
+    }
+    # name = "test"
+    # dataset_folder = "DIV2K_valid_HR"
+
+    name = "train"
+    dataset_folder = "DIV2K_train_HR"
+
+    data_set = get_dataset(name, dataset_folder, config_map)
+    print(len(data_set))

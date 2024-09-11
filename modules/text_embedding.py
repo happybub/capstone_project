@@ -174,7 +174,8 @@ if __name__ == "__main__":
     time2 = time.time()
     #print("Tensor:", output_tensor)
 
-    text_embedding = LinearTextEmbedding1(n_bits_var, channels=1, width=224, height=224)
+    # text_embedding = LinearTextEmbedding1(n_bits_var, channels=1, width=224, height=224)
+    text_embedding = LinearTextEmbedding(n_bits_var, channels=1, width=224, height=224)
     time3 = time.time()
 
     x_var = text_embedding.forward(output_tensor)
