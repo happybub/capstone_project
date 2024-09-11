@@ -1,8 +1,38 @@
 import os
 
-from torch.utils.data import DataLoader, random_split
-from dataset.dataset import StegoDataset
+import requests
 
+from torch.utils.data import DataLoader, random_split
+from dataset import StegoDataset
+from tqdm import tqdm
+
+
+import requests
+from tqdm import tqdm
+
+def download_dataset(download_path, name):
+    """
+    Downloads the DIV2K dataset
+    """
+    if name == "train":
+        url = "http://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_train_HR.zip"
+    elif name == "test":
+        url = "http://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_valid_HR.zip"
+    else:
+        raise ValueError("Invalid dataset name")
+
+    print("Downloading dataset...")
+    response = requests.get(url, stream=True)
+    content_size = int(response.headers.get('content-length', 0))
+    progress_bar = tqdm(total=content_size, unit='iB', unit_scale=True)
+
+    with open(download_path, 'wb') as file:
+        for chunk in response.iter_content(chunk_size=8192):
+            progress_bar.update(len(chunk))
+            file.write(chunk)
+    progress_bar.close()
+
+    print("Download complete!")
 
 def get_dataset(name, config_map):
     """
@@ -41,3 +71,6 @@ def get_dataloader(config_map):
         'val': val_dataloader,
         'test': test_dataloader
     }
+
+if __name__ == "__main__":
+    download_dataset("../data/train.zip", "train")
