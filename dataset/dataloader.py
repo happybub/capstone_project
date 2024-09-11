@@ -1,18 +1,19 @@
 import os
 
 import requests
+from tqdm import tqdm
+import zipfile
 
 from torch.utils.data import DataLoader, random_split
 from dataset import StegoDataset
-from tqdm import tqdm
 
-
-import requests
-from tqdm import tqdm
 
 def download_dataset(download_path, name):
     """
     Downloads the DIV2K dataset
+
+    :param download_path: path to save the downloaded dataset
+    :param name: type of the dataset, 'train' or 'test'
     """
     if name == "train":
         url = "http://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_train_HR.zip"
@@ -33,6 +34,21 @@ def download_dataset(download_path, name):
     progress_bar.close()
 
     print("Download complete!")
+
+
+def unzip_dataset(zip_path, extract_to):
+    """
+    Unzips a ZIP file to a specified directory.
+
+    :param zip_path: Path to the ZIP file.
+    :param extract_to: Directory to extract the ZIP file contents into.
+    """
+    if not os.path.exists(extract_to):
+        os.makedirs(extract_to)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(extract_to)
+        print(f"Files extracted to {extract_to}")
 
 def get_dataset(name, config_map):
     """
@@ -74,3 +90,4 @@ def get_dataloader(config_map):
 
 if __name__ == "__main__":
     download_dataset("../data/train.zip", "train")
+    unzip_dataset("../data/train.zip", "../data/train")
