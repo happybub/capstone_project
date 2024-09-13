@@ -1,1 +1,7 @@
-torchvision==0.19.1
+torchvision~=0.20.0.dev20240725
+
+pillow~=10.4.0
+requests~=2.32.3
+tqdm~=4.66.4
+matplotlib~=3.8.4
+numpy~=1.26.4
