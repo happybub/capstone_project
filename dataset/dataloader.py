@@ -1,17 +1,73 @@
 import os
 
+import requests
+from tqdm import tqdm
+import zipfile
+
 from torch.utils.data import DataLoader, random_split
-from dataset.dataset import StegoDataset
+from dataset import StegoDataset
 
 
-def get_dataset(name, config_map):
+def download_dataset(download_path, name):
+    """
+    Downloads the DIV2K dataset
+
+    :param download_path: path to save the downloaded dataset
+    :param name: type of the dataset, 'train' or 'test'
+    """
+    if name == "train":
+        url = "http://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_train_HR.zip"
+    elif name == "test":
+        url = "http://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_valid_HR.zip"
+    else:
+        raise ValueError("Invalid dataset name")
+
+    print("Downloading dataset...")
+    response = requests.get(url, stream=True)
+    content_size = int(response.headers.get('content-length', 0))
+    progress_bar = tqdm(total=content_size, unit='iB', unit_scale=True)
+
+    with open(download_path, 'wb') as file:
+        for chunk in response.iter_content(chunk_size=8192):
+            progress_bar.update(len(chunk))
+            file.write(chunk)
+    progress_bar.close()
+
+    print("Download complete!")
+
+
+def unzip_dataset(zip_path, extract_to):
+    """
+    Unzips a ZIP file to a specified directory.
+
+    :param zip_path: Path to the ZIP file.
+    :param extract_to: Directory to extract the ZIP file contents into.
+    """
+    if not os.path.exists(extract_to):
+        os.makedirs(extract_to)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(extract_to)
+        print(f"Files extracted to {extract_to}")
+
+def get_dataset(name, dataset_folder, config_map):
     """
     get the dataset map, which contains the train, val, and test dataset
-    config_map keys include:
-    - DATA_ROOT
+
+    :param name: type of the dataset, 'train' or 'test'
+    :param dataset_folder: Path to the dataset folder
+    :param config_map: Config map,
+                     - DATA_ROOT root of the dataset
     """
     data_root = config_map["DATA_ROOT"]
-    return StegoDataset(os.path.join(data_root, name))
+    path = os.path.join(data_root, name)
+    if not os.listdir(path):
+        print("Preparing to download the dataset...")
+        data_path = os.path.join(data_root, name + ".zip")
+        download_dataset(data_path, name)
+        unzip_dataset(data_path, path)
+
+    return StegoDataset(os.path.join(data_root, name, dataset_folder))
 
 
 def get_dataloader(config_map):
@@ -41,3 +97,16 @@ def get_dataloader(config_map):
         'val': val_dataloader,
         'test': test_dataloader
     }
+
+if __name__ == "__main__":
+    config_map = {
+        "DATA_ROOT": "../data",
+    }
+    # name = "test"
+    # dataset_folder = "DIV2K_valid_HR"
+
+    name = "train"
+    dataset_folder = "DIV2K_train_HR"
+
+    data_set = get_dataset(name, dataset_folder, config_map)
+    print(len(data_set))
