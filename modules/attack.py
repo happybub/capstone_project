@@ -1,3 +1,5 @@
+import time
+
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
@@ -138,6 +140,36 @@ class SaltAndPepperNoiseAttack(AttackModule):
         return result_image
 
 
+class SaltAndPepperNoiseAttackBatch(AttackModule):
+    """
+    Add salt and pepper noise to the input image(batch)
+    """
+    def __init__(self, salt_prob=0.01, pepper_prob=0.01):
+        super().__init__()
+        self.salt_prob = salt_prob
+        self.pepper_prob = pepper_prob
+
+    def forward(self, image):
+        n, c, h, w = image.shape
+        zero_matrix = torch.zeros(h, w)
+        total_pixels = zero_matrix.numel()
+        modify_count_salt = int(total_pixels * self.salt_prob)
+        modify_count_pepper = int(total_pixels * self.pepper_prob)
+        total_perm = torch.randperm(total_pixels)
+
+        indices512 = total_perm[:modify_count_pepper]
+        indices_neg512 = total_perm[total_pixels - modify_count_salt:]
+        zero_matrix.view(-1)[indices512] = 512
+        zero_matrix.view(-1)[indices_neg512] = -512
+
+        zero_matrix = zero_matrix.unsqueeze(0)
+        image_salted = zero_matrix.repeat(n, c, 1, 1)
+
+        noisy_image = image_salted + image
+        result_image = torch.clamp(noisy_image, min=-255, max=255)
+        return result_image
+
+
 class JPEGCompressionAttack(AttackModule):
     """
     Simulate JPEG compression attack by compressing the image with a low quality factor.
@@ -187,5 +219,48 @@ def attack_testing(image_path):
     plt.show()
 
 
+def load_images_to_tensor(image_paths, transform):
+    images = []
+    for image_path in image_paths:
+        image = Image.open(image_path).convert('RGB')
+        image_tensor = transform(image)
+        images.append(image_tensor)
+    return torch.stack(images)
+
+
+def attack_testing_batch(image_paths):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor()
+    ])
+    attack = SaltAndPepperNoiseAttackBatch()
+
+    # 加载所有图像到一个批次
+    image_tensors = load_images_to_tensor(image_paths, transform)
+    n = image_tensors.size(0)
+    fig, axs = plt.subplots(n, 2, figsize=(10, 5 * n))
+
+    time1 = time.time()
+    noisy_image_tensors = attack.forward(image_tensors)
+    time2 = time.time()
+    print(f"Batch processing Time taken: {time2 - time1:.4f}s")
+
+    def tensor_to_pil(tensor):
+        transform1 = transforms.ToPILImage()
+        return transform1(tensor)
+
+    for idx in range(n):
+        axs[idx, 0].imshow(tensor_to_pil(image_tensors[idx]))
+        axs[idx, 0].set_title('Original Image')
+        axs[idx, 0].axis('off')
+
+        axs[idx, 1].imshow(tensor_to_pil(noisy_image_tensors[idx]))
+        axs[idx, 1].set_title('Noisy Image')
+        axs[idx, 1].axis('off')
+
+    plt.show()
+
+
 if __name__ == "__main__":
-    attack_testing('..\\data\\test\\host.jpg')
+    attack_testing_batch(['..\\data\\test\\host.jpg', '..\\data\\test\\1.jpg', '..\\data\\test\\2.jpg', '..\\data\\test\\3.jpg']
+)
