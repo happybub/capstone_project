@@ -1,10 +1,10 @@
 # define the model
 import torch
 from torch import nn
-from text_embedding import RandomTextEmbedding, TextEmbeddingModule
-from dwt import PRIS_DWT, DWTModule
-from image_embedding import WeightedImageEmbedding, ImageEmbeddingModule
-from attack import GaussianNoiseAttack, AttackModule
+from .text_embedding import RandomTextEmbedding, TextEmbeddingModule
+from .dwt import PRIS_DWT, DWTModule
+from .image_embedding import WeightedImageEmbedding, ImageEmbeddingModule
+from .attack import GaussianNoiseAttack, AttackModule
 from utils import initialize_weights
 
 

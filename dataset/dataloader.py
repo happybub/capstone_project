@@ -50,16 +50,24 @@ def unzip_dataset(zip_path, extract_to):
         zip_ref.extractall(extract_to)
         print(f"Files extracted to {extract_to}")
 
-def get_dataset(name, dataset_folder, config_map):
+
+def get_dataset(name, config_map):
     """
     get the dataset map, which contains the train, val, and test dataset
 
     :param name: type of the dataset, 'train' or 'test'
-    :param dataset_folder: Path to the dataset folder
     :param config_map: Config map,
                      - DATA_ROOT root of the dataset
+                     - DATASET_FOLDER Path to the dataset folder
     """
     data_root = config_map["DATA_ROOT"]
+    if name == "train":
+        dataset_folder = config_map["DATASET_TRAIN_FOLDER"]
+    elif name == "test":
+        dataset_folder = config_map["DATASET_TEST_FOLDER"]
+    else:
+        raise ValueError("Invalid dataset name")
+
     path = os.path.join(data_root, name)
     if not os.listdir(path):
         print("Preparing to download the dataset...")
