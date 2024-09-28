@@ -44,7 +44,7 @@ def pop_up_image(image):
 
 
 def mse_loss(a, b):
-    loss_fn = torch.nn.MSELoss(reduce=True, size_average=False)
+    loss_fn = torch.nn.MSELoss(reduction='sum')
     loss = loss_fn(a, b)
     return loss
 

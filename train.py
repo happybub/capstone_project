@@ -25,10 +25,10 @@ def train_epoch(net, optim, dataloader_map, config, mode='train'):
 
     for i, images in enumerate(dataloader):
         # get the host images
-        images = images.to(device)
+        images = images.to(device=device)
 
         # generate the secrets message
-        secret = torch.randint(0, 2, (images.size(0), num_bits)).float().to(device)
+        secret = torch.randint(0, 2, (images.size(0), num_bits)).float().to(device=device)
 
         with torch.set_grad_enabled(mode == 'train'):
 
@@ -53,7 +53,7 @@ def train_epoch(net, optim, dataloader_map, config, mode='train'):
                 total_loss.backward()
                 optim.step()
 
-        print(f'Step: {i}, Image Loss: {image_loss.item()}, Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}')
+        print(f'Batch: #{i}, Image Loss: {image_loss.item()}, Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}')
 
 
 def train(name, start_epoch, end_epoch, config):
@@ -71,7 +71,7 @@ def train(name, start_epoch, end_epoch, config):
     attack_module = load_class_by_name(config_map['ATTACK_MODULE'])()
 
     # construct the model
-    net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module).to(device)
+    net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module).to(device=device)
     print(net)
     for name, param in net.named_parameters():
         print(name, param.size())

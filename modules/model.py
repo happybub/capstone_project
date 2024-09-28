@@ -1,4 +1,6 @@
 # define the model
+import time
+
 import torch
 from torch import nn
 from .text_embedding import RandomTextEmbedding, TextEmbeddingModule
@@ -58,31 +60,54 @@ class OurModel(nn.Module):
         self.attack = attack
 
     def forward(self, text_bits, host_image):
+        device = text_bits.device
+
+        print("before dwt")
         freq_host_image = self.dwt(host_image)
 
+        # place the model on the cpu for text_embedding
+
+        print("before text_embedding")
+        text_bits = text_bits.to("cpu")
         secret_image = self.text_embedding(text_bits)
-        # secret_image = secret_image.unsqueeze(0)
+        secret_image = secret_image.to(device)
+
+        print("before dwt")
         freq_secret_image = self.dwt(secret_image)
 
+        print("before image_embedding")
         freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
 
+        print("before dwt")
         container_image = self.dwt(freq_container, rev=True)
 
         return container_image
 
     def attack_image(self, container_image):
+        print("before attack")
         noised_image = self.attack(container_image)
+        print("after attack")
         return noised_image
 
     def reverse(self, noised_image):
+        device = noised_image.device
+
         r_container = noised_image
+
+        print("before dwt")
         r_freq_container = self.dwt(r_container)
         r_freq_noise = torch.randn_like(r_freq_container)
 
+        print("before image_embedding")
         r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
 
+        print("before dwt")
         r_secret_image = self.dwt(r_freq_secret_image, rev=True)
+
+        print("before text_embedding")
+        r_secret_image = r_secret_image.to("cpu")
         r_text_bits = self.text_embedding(r_secret_image, rev=True)
+        r_text_bits = r_text_bits.to(device)
 
         return r_text_bits
 
@@ -149,9 +174,10 @@ class INV_block(nn.Module):
 
 class Hinet(ImageEmbeddingModule):
 
-    def __init__(self, in_1=3, in_2=3):
-        super(Hinet, self).__init__()
-
+    def __init__(self, channels, width, height):
+        super(Hinet, self).__init__(channels, width, height)
+        in_1 = 3
+        in_2 = 3
         self.inv1 = INV_block(in_1=in_1, in_2=in_2)
         self.inv2 = INV_block(in_1=in_1, in_2=in_2)
         self.inv3 = INV_block(in_1=in_1, in_2=in_2)

@@ -118,7 +118,7 @@ class LinearTextEmbedding(TextEmbeddingModule):
     def transform(self, bits):
         batch = bits.shape[0]
         assert bits.numel() == self.n_bits * batch, "The number of bits does not match the expected n_bits."
-        result_tensor = torch.full((batch, self.channels, self.width, self.height), 0, dtype=torch.float32)
+        result_tensor = torch.full((batch, self.channels, self.width, self.height), 0, dtype=torch.float32).to(device=bits.device)
         map_range = ((self.width * self.height) // 8) * 8
 
         for n in range(batch):
@@ -158,16 +158,19 @@ class LinearTextEmbedding1(TextEmbeddingModule):
     import torch
 
     def transform(self, bits):
-        assert bits.numel() == self.n_bits, "The number of bits does not match the expected n_bits."
-        bits = bits.view(self.channels, -1)[0, :]
-        n = bits.numel()
+        batch = bits.shape[0]
+        assert bits.numel() == self.n_bits * batch, "The number of bits does not match the expected n_bits."
+
+        n = bits[-1].numel()
         total_pixels = self.width * self.height
         k = total_pixels // n
         bits_repeated = bits.repeat(k)
         num_zeros_to_add = total_pixels - bits_repeated.numel()
         zeros_to_add = torch.zeros(num_zeros_to_add, dtype=bits.dtype)
         x_padded = torch.cat((bits_repeated, zeros_to_add))
+
         x_reshaped = x_padded.view(1, 224, 224)
+
         return x_reshaped
 
     def reverse(self, result_tensor):
