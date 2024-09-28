@@ -69,6 +69,8 @@ class TextEmbeddingModule(nn.Module):
         self.width = width
         self.height = height
 
+        self.linear = nn.Linear(n_bits, channels * width * height)
+
     def forward(self, x, rev=False):
         if not rev:
             return self.transform(x)
@@ -85,6 +87,13 @@ class TextEmbeddingModule(nn.Module):
 class RandomTextEmbedding(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):
         super().__init__(n_bits, channels, width, height)
+        self.linear = nn.Linear(n_bits, channels * width * height)
+
+    def forward(self, x, rev=False):
+        if not rev:
+            return self.transform(x)
+        else:
+            return self.reverse(x)
 
     def transform(self, bits):
         assert bits.numel() == self.n_bits, "The number of bits does not match the expected n_bits."
@@ -98,31 +107,44 @@ class RandomTextEmbedding(TextEmbeddingModule):
 class LinearTextEmbedding(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):
         super().__init__(n_bits, channels, width, height)
+        self.linear = nn.Linear(n_bits, channels * width * height)
+
+    def forward(self, x, rev=False):
+        if not rev:
+            return self.transform(x)
+        else:
+            return self.reverse(x)
 
     def transform(self, bits):
-        assert bits.numel() == self.n_bits, "The number of bits does not match the expected n_bits."
-        result_tensor = torch.full((self.channels, self.width, self.height), 0, dtype=torch.float32)
+        batch = bits.shape[0]
+        assert bits.numel() == self.n_bits * batch, "The number of bits does not match the expected n_bits."
+        result_tensor = torch.full((batch, self.channels, self.width, self.height), 0, dtype=torch.float32)
         map_range = ((self.width * self.height) // 8) * 8
-        for c in range(self.channels):
-            for i in range(map_range):
-                x = i // self.width
-                y = i % self.width
-                if abs(bits[i % bits.numel()].item()) > 0.5:
-                    result_tensor[c, x, y] = 1
-                else:
-                    result_tensor[c, x, y] = 0
+
+        for n in range(batch):
+            for c in range(self.channels):
+                for i in range(map_range):
+                    x = i // self.width
+                    y = i % self.width
+
+                    if abs(bits[n][i % bits[n].numel()].item()) > 0.5:
+                        result_tensor[n, c, x, y] = 1
+                    else:
+                        result_tensor[n, c, x, y] = 0
         return result_tensor
 
     def reverse(self, result_tensor):
-        bits = torch.zeros(self.n_bits, dtype=torch.float32)
+        batch = result_tensor.shape[0]
+        bits = torch.zeros((batch, self.n_bits), dtype=torch.float32)
         bit_index = -1
-        for c in range(self.channels):
-            for h in range(self.height):
-                for w in range(self.width):
-                    bit_index += 1
-                    bit_index = bit_index % self.n_bits
-                    if result_tensor[c, h, w] > 0.5:
-                        bits[bit_index] += 1
+        for n in range(batch):
+            for c in range(self.channels):
+                for h in range(self.height):
+                    for w in range(self.width):
+                        bit_index += 1
+                        bit_index = bit_index % self.n_bits
+                        if result_tensor[n][c, h, w] > 0.5:
+                            bits[n][bit_index] += 1
         threshold = self.width * self.height // self.n_bits // 2
         bits = (bits > threshold).float()
         return bits
@@ -131,6 +153,7 @@ class LinearTextEmbedding(TextEmbeddingModule):
 class LinearTextEmbedding1(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):
         super().__init__(n_bits, channels, width, height)
+        self.linear = nn.Linear(n_bits, channels * width * height)
 
     import torch
 

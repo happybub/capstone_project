@@ -36,7 +36,7 @@ def train_epoch(net, optim, dataloader_map, config, mode='train'):
             container_image = net(secret, images)
 
             # attack the images
-            attacked_image = net.attack(container_image)
+            attacked_image = net.attack_image(container_image)
 
             # recover the secret message
             recovered_secret = net.reverse(attacked_image)
@@ -72,6 +72,10 @@ def train(name, start_epoch, end_epoch, config):
 
     # construct the model
     net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module).to(device)
+    print(net)
+    for name, param in net.named_parameters():
+        print(name, param.size())
+
     optim = torch.optim.Adam(net.parameters(), lr=float(config['LEARNING_RATE']))
 
     # create the dictionary for the training
@@ -91,10 +95,10 @@ def train(name, start_epoch, end_epoch, config):
             print(f'Load the model and the optimizer from {epoch - 1}.pth')
 
         # continue the training
-        train_epoch(net, optim, dataloader_map, mode='train')
+        train_epoch(net, optim, dataloader_map, config, mode='train')
 
         # validate the model
-        train_epoch(net, optim, dataloader_map, mode='val')
+        train_epoch(net, optim, dataloader_map, config, mode='val')
 
         # save the state dict
         save_freq = config['SAVE_FREQ']
@@ -106,11 +110,9 @@ def train(name, start_epoch, end_epoch, config):
 if __name__ == '__main__':
     config_map = get_config()
     print(config_map)
-    dataloader_map = get_dataloader(config_map)
-    first_training_sample = next(iter(dataloader_map['train']))
-    first_validation_sample = next(iter(dataloader_map['val']))
-    first_test_sample = next(iter(dataloader_map['test']))
 
-    pop_up_image(first_training_sample)
-    pop_up_image(first_validation_sample)
-    pop_up_image(first_test_sample)
+    name = "test"
+    start_epoch = 1
+    end_epoch = 100
+
+    train(name, start_epoch, end_epoch, config_map)

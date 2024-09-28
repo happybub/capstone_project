@@ -61,7 +61,7 @@ class OurModel(nn.Module):
         freq_host_image = self.dwt(host_image)
 
         secret_image = self.text_embedding(text_bits)
-        secret_image = secret_image.unsqueeze(0)
+        # secret_image = secret_image.unsqueeze(0)
         freq_secret_image = self.dwt(secret_image)
 
         freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
@@ -70,7 +70,7 @@ class OurModel(nn.Module):
 
         return container_image
 
-    def attack(self, container_image):
+    def attack_image(self, container_image):
         noised_image = self.attack(container_image)
         return noised_image
 
