@@ -55,6 +55,71 @@ class StringAsciiToTensor(nn.Module):
         return ''.join(characters)
 
 
+class StringAsciiToTensorMatrix(nn.Module):
+    """
+            Class to convert a batch of strings to a tensor of ASCII bit representations.
+            Input: A batch of strings
+            Output: A 2D tensor of 0/1 values representing the ASCII codes in binary form.
+            """
+
+    def __init__(self, n_bits):
+        super().__init__()
+        self.n_bits = n_bits  # Total number of bits in the output tensor for each string
+
+    def forward(self, input_strings):
+        """
+        Convert the batch of strings to a tensor of ASCII bit representations.
+        If the number of bits is less than n_bits, pad with spaces and zeros.
+        """
+        # Process each string in the batch
+        batch_size = len(input_strings)
+        max_string_length = max(len(s) for s in input_strings)
+
+        # Initialize a list to hold the bit lists for each string
+        batch_bit_lists = []
+
+        for string in input_strings:
+            ascii_values = [format(ord(char), '08b') for char in string]
+            flattened_bits = ''.join(ascii_values)
+            # Convert the binary string to a list of 0/1 integers
+            bit_list = [int(bit) for bit in flattened_bits]
+
+            # Pad with spaces (ASCII 32) if necessary
+            while self.n_bits - len(bit_list) >= 8:
+                bit_list.extend([0, 0, 1, 0, 0, 0, 0, 0])
+
+            # Pad with zeros if necessary
+            if len(bit_list) < self.n_bits:
+                bit_list += [0] * (self.n_bits - len(bit_list))
+
+            batch_bit_lists.append(bit_list)
+
+        # Convert the list of lists to a tensor
+        bit_tensor = torch.tensor(batch_bit_lists, dtype=torch.float32).unsqueeze(1)
+        return bit_tensor.view(batch_size, -1)
+
+    @staticmethod
+    def reverse(bit_tensor):
+        """
+        Convert the tensor of 0/1 values back to the original batch of strings.
+        """
+        batch_size = bit_tensor.size(0)
+        bit_list = [[int(bit) for bit in string] for string in bit_tensor.tolist()]
+        strings = []
+
+        for i in range(batch_size):
+            character_bits = [bit_list[i][j:j + 8] for j in range(0, len(bit_list[i]), 8)]
+            characters = []
+            for byte in character_bits:
+                if len(byte) < 8:
+                    break
+                ascii_value = int(''.join(map(str, byte)), 2)
+                characters.append(chr(ascii_value))
+            strings.append(''.join(characters))
+
+        return strings
+
+
 class TextEmbeddingModule(nn.Module):
     """
     Base class for text embedding modules.
@@ -146,7 +211,7 @@ class LinearTextEmbedding(TextEmbeddingModule):
                         if result_tensor[n][c, h, w] > 0.5:
                             bits[n][bit_index] += 1
         threshold = self.width * self.height // self.n_bits // 2
-        bits = (bits > threshold).float()
+        bits = (bits > threshold).int()
         return bits
 
 
@@ -171,14 +236,13 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         return x_reshaped
 
     def reverse(self, result_tensor):
-        # TODO: remains modification
         b = result_tensor.shape[0]
         total_pixels = self.width * self.height
         k = total_pixels // self.n_bits
 
         result_flat = result_tensor.view(b, self.channels, -1)
-        result_1st_channel = result_flat[0, :k * self.n_bits]
-        chunks = torch.chunk(result_1st_channel, chunks=k)
+        result_1st_channel = result_flat[0:b, 0, :k * self.n_bits]
+        chunks = torch.chunk(result_1st_channel, dim=1, chunks=k)
         stacked_chunks = torch.stack(chunks)
         sum_tensor = torch.sum(stacked_chunks, dim=0)
         threshold = k // 2
@@ -187,16 +251,21 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         return sum_tensor
 
 
-if __name__ == "__main__":
+def fill_in(string_list, n_bits):
+    length_to_fill = n_bits // 8
+    padded_list = [s.ljust(length_to_fill) for s in string_list]
+    return padded_list
+
+
+def single_test():
     start_time = time.time()
-    n_bits_var = 223
+    n_bits_var = 200
     model = StringAsciiToTensor(n_bits_var)
     time1 = time.time()
-    input_string_1 = "hello!"
-
+    input_string_1 = ["hello!"]
     output_tensor = model.forward(input_string_1)
     time2 = time.time()
-    #print("Tensor:", output_tensor)
+    # print("Tensor:", output_tensor)
 
     # text_embedding = LinearTextEmbedding1(n_bits_var, channels=1, width=224, height=224)
     text_embedding = LinearTextEmbedding(n_bits_var, channels=1, width=224, height=224)
@@ -216,3 +285,38 @@ if __name__ == "__main__":
     print("4: {:.4f}s".format(time4 - time3))
     print("5: {:.4f}s".format(time5 - time4))
     print("String:", reconstructed_string)
+
+
+def matrix_test():
+    start_time = time.time()
+    n_bits_var = 200
+    model = StringAsciiToTensorMatrix(n_bits_var)
+    time1 = time.time()
+    input_string_2 = ["hello!", "Hi."]
+    output_tensor = model.forward(input_string_2)
+    time2 = time.time()
+    # print("Tensor:", output_tensor)
+
+    # text_embedding = LinearTextEmbedding1(n_bits_var, channels=1, width=224, height=224)
+    text_embedding = LinearTextEmbedding1(n_bits_var, channels=1, width=224, height=224)
+    time3 = time.time()
+
+    x_var = text_embedding.forward(output_tensor)
+    time4 = time.time()
+
+    bit_var = text_embedding.forward(x_var, rev=True)
+    time5 = time.time()
+
+    reconstructed_string = model.reverse(bit_var)
+
+    print("1: {:.4f}s".format(time1 - start_time))
+    print("2: {:.4f}s".format(time2 - time1))
+    print("3: {:.4f}s".format(time3 - time2))
+    print("4: {:.4f}s".format(time4 - time3))
+    print("5: {:.4f}s".format(time5 - time4))
+    print("String:", reconstructed_string)
+
+
+if __name__ == "__main__":
+    matrix_test()
+    #single_test()
