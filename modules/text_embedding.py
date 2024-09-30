@@ -158,27 +158,25 @@ class LinearTextEmbedding1(TextEmbeddingModule):
     import torch
 
     def transform(self, bits):
-        batch = bits.shape[0]
-        assert bits.numel() == self.n_bits * batch, "The number of bits does not match the expected n_bits."
+        b = bits.shape[0]
+        assert bits.numel() == self.n_bits * b, "The number of bits does not match the expected n_bits."
 
-        n = bits[-1].numel()
         total_pixels = self.width * self.height
-        k = total_pixels // n
-        bits_repeated = bits.repeat(k)
-        num_zeros_to_add = total_pixels - bits_repeated.numel()
-        zeros_to_add = torch.zeros(num_zeros_to_add, dtype=bits.dtype)
-        x_padded = torch.cat((bits_repeated, zeros_to_add))
-
-        x_reshaped = x_padded.view(1, 224, 224)
-
+        k = total_pixels // self.n_bits
+        bits_repeated = bits.repeat(1, k)
+        num_zeros_to_add = total_pixels - bits_repeated.size(1)
+        zeros_to_add = torch.zeros(b, num_zeros_to_add, dtype=bits.dtype, device=bits.device)
+        x_padded = torch.cat((bits_repeated, zeros_to_add),dim=1)
+        x_reshaped = x_padded.view(b, 1, self.width, self.height).repeat(1, self.channels, 1, 1)
         return x_reshaped
 
     def reverse(self, result_tensor):
+        # TODO: remains modification
+        b = result_tensor.shape[0]
         total_pixels = self.width * self.height
         k = total_pixels // self.n_bits
 
-        # 将 result_tensor 转换为二维张量并置于第一个通道
-        result_flat = result_tensor.view(self.channels, -1)
+        result_flat = result_tensor.view(b, self.channels, -1)
         result_1st_channel = result_flat[0, :k * self.n_bits]
         chunks = torch.chunk(result_1st_channel, chunks=k)
         stacked_chunks = torch.stack(chunks)
