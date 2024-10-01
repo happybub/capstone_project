@@ -10,7 +10,6 @@ from torchvision.transforms import ToTensor, ToPILImage
 import io
 
 
-
 class AttackModule(nn.Module):
     """
     Base class for noise attack module.
@@ -192,6 +191,33 @@ class JPEGCompressionAttack(AttackModule):
         return tensor_image
 
 
+class MultiAttack(AttackModule):
+    """
+    Randomly apply different attacks to the input image based on given probabilities.
+    """
+    def __init__(self, gaussian_prob=0.5, salt_pepper_prob=0.5, jpeg_prob=0, quality=50, salt_prob=0.01, pepper_prob=0.01, mean=0, std=0.01):
+        super().__init__()
+        self.gaussian_attack = GaussianNoiseAttack(mean=mean, std=std)
+        self.salt_pepper_attack = SaltAndPepperNoiseAttackBatch(salt_prob=salt_prob, pepper_prob=pepper_prob)
+        self.jpeg_attack = JPEGCompressionAttack(quality=quality)
+        self.gaussian_prob = gaussian_prob
+        self.salt_pepper_prob = salt_pepper_prob
+        self.jpeg_prob = jpeg_prob
+        self.total_prob = jpeg_prob + salt_pepper_prob + gaussian_prob
+        self.range2 = self.gaussian_prob + self.salt_pepper_prob
+        assert (self.gaussian_prob + self.salt_pepper_prob + self.jpeg_prob) <= 1, "Probabilities must sum to 1 or less"
+
+    def forward(self, image):
+        # Randomly select an attack based on the given probabilities
+        r = torch.rand(1).item()
+        if r < self.gaussian_prob / self.total_prob:
+            return self.gaussian_attack.forward(image)
+        elif r < self.range2 / self.total_prob:
+            return self.salt_pepper_attack.forward(image)
+        else:
+            return self.jpeg_attack.forward(image)
+
+
 def attack_testing(image_path):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
@@ -233,9 +259,8 @@ def attack_testing_batch(image_paths):
         transforms.Resize((224, 224)),
         transforms.ToTensor()
     ])
-    attack = SaltAndPepperNoiseAttackBatch()
+    attack = MultiAttack()
 
-    # 加载所有图像到一个批次
     image_tensors = load_images_to_tensor(image_paths, transform)
     n = image_tensors.size(0)
     fig, axs = plt.subplots(n, 2, figsize=(10, 5 * n))
