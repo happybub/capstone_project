@@ -190,6 +190,34 @@ class JPEGCompressionAttack(AttackModule):
         tensor_image = to_tensor(Image.open(buffered))
         return tensor_image
 
+class JPEGCompressionPRISAttack(AttackModule):
+    """
+    Simulate JPEG compression attack by compressing the image with a low quality factor with the method used by PRIS
+    """
+
+    def __init__(self, width=224, height=224, quality=80):
+        super().__init__()
+        self.width = width
+        self.height = height
+        self.quality = quality
+
+    def forward(self, inputs):
+        """
+        param:
+            inputs: a tensor with shape [n, c, h, w]
+
+        output:
+            output: a JPEG compressed tensor with shape [n, c, h, w]
+        """
+        from DiffJPEG import DiffJPEG
+
+        tensor = torch.FloatTensor(inputs)
+        jpeg = DiffJPEG(self.height, self.width, differentiable=True)
+        quality = self.quality
+        jpeg.set_quality(quality)
+
+        outputs = jpeg(tensor)
+        return outputs
 
 class MultiAttack(AttackModule):
     """
