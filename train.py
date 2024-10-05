@@ -8,7 +8,7 @@ from dataset.dataloader import get_dataloader
 from modules.model import OurModel
 
 
-def train_epoch(net, optim, dataloader_map, config, mode='train'):
+def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
     if mode == 'train':
         dataloader = dataloader_map['train']
         net.train()
@@ -23,6 +23,8 @@ def train_epoch(net, optim, dataloader_map, config, mode='train'):
     lambda_image_loss = float(config['LAMBDA_IMAGE_LOSS'])
     lambda_secret_loss = float(config['LAMBDA_SECRET_LOSS'])
 
+    image_losses = []
+    secret_losses = []
     for i, images in enumerate(dataloader):
         # get the host images
         images = images.to(device=device)
@@ -53,7 +55,15 @@ def train_epoch(net, optim, dataloader_map, config, mode='train'):
                 total_loss.backward()
                 optim.step()
 
+        image_losses.append(image_loss.item())
+        secret_losses.append(secret_loss.item())
         print(f'Batch: #{i}, Image Loss: {image_loss.item()}, Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}')
+
+    log_dir = config['LOG_DIR']
+    with open(os.path.join(log_dir, 'epoch: ', epoch, 'image_loss_log.txt'), 'w') as f:
+        f.write('\n'.join(image_losses))
+    with open(os.path.join(log_dir, 'epoch: ', epoch, 'secret_loss_log.txt'), 'w') as f:
+        f.write('\n'.join(secret_losses))
 
 
 def train(name, start_epoch, end_epoch, config):
@@ -95,7 +105,7 @@ def train(name, start_epoch, end_epoch, config):
             print(f'Load the model and the optimizer from {epoch - 1}.pth')
 
         # continue the training
-        train_epoch(net, optim, dataloader_map, config, mode='train')
+        train_epoch(net, optim, dataloader_map, config, epoch, mode='train')
 
         # validate the model
         train_epoch(net, optim, dataloader_map, config, mode='val')

@@ -225,11 +225,11 @@ class MultiAttack(AttackModule):
     """
     Randomly apply different attacks to the input image based on given probabilities.
     """
-    def __init__(self, gaussian_prob=0.5, salt_pepper_prob=0.5, jpeg_prob=0, quality=50, salt_prob=0.01, pepper_prob=0.01, mean=0, std=0.01):
+    def __init__(self, gaussian_prob=0.33, salt_pepper_prob=0.33, jpeg_prob=0.34, height=224, width=224, quality=80, salt_prob=0.01, pepper_prob=0.01, mean=0, std=0.01):
         super().__init__()
         self.gaussian_attack = GaussianNoiseAttack(mean=mean, std=std)
         self.salt_pepper_attack = SaltAndPepperNoiseAttackBatch(salt_prob=salt_prob, pepper_prob=pepper_prob)
-        self.jpeg_attack = JPEGCompressionAttack(quality=quality)
+        self.jpeg_attack = JPEGCompressionPRISAttack(height=height, width=width, quality=quality)
         self.gaussian_prob = gaussian_prob
         self.salt_pepper_prob = salt_pepper_prob
         self.jpeg_prob = jpeg_prob
@@ -289,8 +289,8 @@ def attack_testing_batch(image_paths):
         transforms.Resize((224, 224)),
         transforms.ToTensor()
     ])
-    # attack = MultiAttack()
-    attack = JPEGCompressionPRISAttack()
+    attack = MultiAttack()
+    # attack = JPEGCompressionPRISAttack()
 
     image_tensors = load_images_to_tensor(image_paths, transform)
     n = image_tensors.size(0)
