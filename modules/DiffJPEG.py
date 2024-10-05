@@ -42,13 +42,22 @@ if __name__ == '__main__':
         import numpy as np
 
         img = cv2.imread("../data/test/DIV2K_valid_HR/0801.png")
-        img.resize((224, 224))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        print(img.shape)
+        img1 = img[0:224, 0:224, :]
+        img2 = img[0:224, 224:448, :]
+        img3 = img[224:448, 0:224, :]
+        print(img.shape)
 
         inputs = np.transpose(img, (2, 0, 1))
-        inputs = inputs[np.newaxis, ...]
+        print(inputs.shape)
+        inputs = np.zeros((3, 3, 224, 224))
+        inputs[0] = np.transpose(img1, (2, 0, 1))
+        inputs[1] = np.transpose(img2, (2, 0, 1))
+        inputs[2] = np.transpose(img3, (2, 0, 1))
+        print(inputs.shape)
 
         tensor = torch.FloatTensor(inputs)
+        print(tensor.shape)
         jpeg = DiffJPEG(224, 224, differentiable=True)
 
         quality = 80
@@ -58,10 +67,10 @@ if __name__ == '__main__':
         print(outputs.shape)
         outputs = outputs.detach().numpy()
         print(outputs.shape)
-        outputs = np.transpose(outputs[0], (1, 2, 0))
+        outputs = np.transpose(outputs[2], (1, 2, 0))
         print(outputs.shape)
 
-        outputs = cv2.cvtColor(outputs, cv2.COLOR_RGB2BGR)
+        # outputs = cv2.cvtColor(outputs, cv2.COLOR_RGB2BGR)
 
         cv2.imshow("QF:"+str(quality), outputs / 255.)
         cv2.waitKey()

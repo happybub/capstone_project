@@ -1,5 +1,6 @@
 import time
 
+import numpy as np
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
@@ -190,6 +191,7 @@ class JPEGCompressionAttack(AttackModule):
         tensor_image = to_tensor(Image.open(buffered))
         return tensor_image
 
+
 class JPEGCompressionPRISAttack(AttackModule):
     """
     Simulate JPEG compression attack by compressing the image with a low quality factor with the method used by PRIS
@@ -211,13 +213,13 @@ class JPEGCompressionPRISAttack(AttackModule):
         """
         from DiffJPEG import DiffJPEG
 
-        tensor = torch.FloatTensor(inputs)
+        inputs = inputs * 255
         jpeg = DiffJPEG(self.height, self.width, differentiable=True)
         quality = self.quality
         jpeg.set_quality(quality)
+        outputs = jpeg(inputs)
 
-        outputs = jpeg(tensor)
-        return outputs
+        return outputs / 255.
 
 class MultiAttack(AttackModule):
     """
@@ -287,7 +289,8 @@ def attack_testing_batch(image_paths):
         transforms.Resize((224, 224)),
         transforms.ToTensor()
     ])
-    attack = MultiAttack()
+    # attack = MultiAttack()
+    attack = JPEGCompressionPRISAttack()
 
     image_tensors = load_images_to_tensor(image_paths, transform)
     n = image_tensors.size(0)
@@ -315,5 +318,5 @@ def attack_testing_batch(image_paths):
 
 
 if __name__ == "__main__":
-    attack_testing_batch(['..\\data\\test\\host.jpg', '..\\data\\test\\1.jpg', '..\\data\\test\\2.jpg', '..\\data\\test\\3.jpg']
+    attack_testing_batch(['..\\data\\test\\DIV2K_valid_HR\\0801.png', '..\\data\\test\\DIV2K_valid_HR\\0802.png', '..\\data\\test\\DIV2K_valid_HR\\0803.png']
 )
