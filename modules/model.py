@@ -59,6 +59,8 @@ class OurModel(nn.Module):
         self.image_embedding = image_embedding
         self.attack = attack
         self.print_time = True
+        self.activation = nn.Sigmoid()
+
 
     def forward(self, text_bits, host_image):
         if self.print_time:
@@ -114,6 +116,9 @@ class OurModel(nn.Module):
         if self.print_time:
             print(f"before image_embedding: {time.time()}")
         r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
+
+        # apply the activation function
+        r_freq_secret_image = self.activation(r_freq_secret_image)
 
         if self.print_time:
             print(f"before dwt: {time.time()}")
@@ -192,8 +197,9 @@ class Hinet(ImageEmbeddingModule):
 
     def __init__(self, channels, width, height):
         super(Hinet, self).__init__(channels, width, height)
-        in_1 = 3
-        in_2 = 3
+        self.channels = channels
+        in_1 = self.channels
+        in_2 = 1
         self.inv1 = INV_block(in_1=in_1, in_2=in_2)
         self.inv2 = INV_block(in_1=in_1, in_2=in_2)
         self.inv3 = INV_block(in_1=in_1, in_2=in_2)
@@ -253,7 +259,7 @@ class Hinet(ImageEmbeddingModule):
             out = self.inv1(out, rev=True)
 
         # split the output
-        len = x.shape[1] // 2
+        len = out.shape[1] * self.channels // (self.channels + 1)
         x = out[:, :len, :, :]
         y = out[:, len:, :, :]
         return x, y

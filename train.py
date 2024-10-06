@@ -87,8 +87,8 @@ def train(name, start_epoch, end_epoch, config):
     device = config['DEVICE']
 
     # construct the modules
-    text_embedding_module = load_class_by_name(config_map['TEXT_EMBEDDING_MODULE'])(num_bits, channels, image_width,
-                                                                                    image_height)
+    text_embedding_module = load_class_by_name(config_map['TEXT_EMBEDDING_MODULE'])(num_bits, channels=1, width=image_width,
+                                                                                    height=image_height)
     dwt = load_class_by_name(config_map['DWT_MODULE'])()
     image_embedding_module = load_class_by_name(config_map['IMAGE_EMBEDDING_MODULE'])(channels, image_height,
                                                                                       image_width)

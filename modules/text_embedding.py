@@ -220,7 +220,6 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         super().__init__(n_bits, channels, width, height)
         self.linear = nn.Linear(n_bits, channels * width * height)
 
-    import torch
 
     def transform(self, bits):
         b = bits.shape[0]
@@ -245,10 +244,13 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         chunks = torch.chunk(result_1st_channel, dim=1, chunks=k)
         stacked_chunks = torch.stack(chunks)
         sum_tensor = torch.sum(stacked_chunks, dim=0)
-        threshold = k // 2
-        sum_tensor = (sum_tensor > threshold).float()
+        mean_tensor = sum_tensor / k
+        # threshold = k // 2
+        # sum_tensor = (sum_tensor > threshold).float()
 
-        return sum_tensor
+
+
+        return mean_tensor
 
 
 def fill_in(string_list, n_bits):
