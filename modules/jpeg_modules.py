@@ -2,7 +2,7 @@ import itertools
 import numpy as np
 import torch
 import torch.nn as nn
-import jpeg_utils
+from modules import jpeg_utils
 
 
 class rgb_to_ycbcr_jpeg(nn.Module):

@@ -1,4 +1,5 @@
 import os
+import time
 
 import torch
 
@@ -9,6 +10,8 @@ from modules.model import OurModel
 
 
 def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
+    print_time = config['PRINT_TIME']
+    net.print_time = print_time
     if mode == 'train':
         dataloader = dataloader_map['train']
         net.train()
@@ -30,7 +33,8 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
         images = images.to(device=device)
 
         # generate the secrets message
-        secret = torch.randint(0, 2, (images.size(0), num_bits)).float().to(device=device)
+        batch = images.size(0)
+        secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
 
         with torch.set_grad_enabled(mode == 'train'):
 
@@ -44,26 +48,36 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
             recovered_secret = net.reverse(attacked_image)
 
             # calculate the loss
+            if print_time:
+                print(f"calculating the loss: {time.time()}")
             image_loss = mse_loss(container_image, images)
             secret_loss = mse_loss(recovered_secret, secret)
+            if print_time:
+                print(f"loss calculated: {time.time()}")
 
             total_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
 
             # backward pass
             if mode == 'train':
+                if print_time:
+                    print(f"start backward: {time.time()}")
                 optim.zero_grad()
                 total_loss.backward()
                 optim.step()
+                if print_time:
+                    print(f"end backward: {time.time()}")
 
         image_losses.append(image_loss.item())
         secret_losses.append(secret_loss.item())
         print(f'Batch: #{i}, Image Loss: {image_loss.item()}, Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}')
 
     log_dir = config['LOG_DIR']
-    with open(os.path.join(log_dir, 'epoch: ', epoch, 'image_loss_log.txt'), 'w') as f:
-        f.write('\n'.join(image_losses))
-    with open(os.path.join(log_dir, 'epoch: ', epoch, 'secret_loss_log.txt'), 'w') as f:
-        f.write('\n'.join(secret_losses))
+    # create the log file
+    os.makedirs(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}'), exist_ok=True)
+    with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'image_loss_log.txt'), 'w') as f:
+        f.write('\n'.join([str(item) for item in image_losses]))
+    with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'secret_loss_log.txt'), 'w') as f:
+        f.write('\n'.join([str(item) for item in secret_losses]))
 
 
 def train(name, start_epoch, end_epoch, config):
@@ -82,11 +96,8 @@ def train(name, start_epoch, end_epoch, config):
 
     # construct the model
     net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module).to(device=device)
-    print(net)
-    for name, param in net.named_parameters():
-        print(name, param.size())
 
-    optim = torch.optim.Adam(net.parameters(), lr=float(config['LEARNING_RATE']))
+    optim = torch.optim.Adam(net.parameters(), lr=float(config['LEARNING_RATE']), weight_decay=config['WEIGHT_DECAY'])
 
     # create the dictionary for the training
     checkpoints_path = str(config['CHECKPOINTS_PATH'])
@@ -108,7 +119,7 @@ def train(name, start_epoch, end_epoch, config):
         train_epoch(net, optim, dataloader_map, config, epoch, mode='train')
 
         # validate the model
-        train_epoch(net, optim, dataloader_map, config, mode='val')
+        train_epoch(net, optim, dataloader_map, config, epoch, mode='val')
 
         # save the state dict
         save_freq = config['SAVE_FREQ']
@@ -121,7 +132,9 @@ if __name__ == '__main__':
     config_map = get_config()
     print(config_map)
 
-    name = "test"
+    # get the time in format yyyymmdd:HHMMSS
+    time_str = time.strftime("%y%m%d_%H%M%S")
+    name = time_str
     start_epoch = 1
     end_epoch = 100
 

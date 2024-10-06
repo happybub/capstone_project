@@ -58,57 +58,73 @@ class OurModel(nn.Module):
         self.dwt = dwt
         self.image_embedding = image_embedding
         self.attack = attack
+        self.print_time = True
 
     def forward(self, text_bits, host_image):
+        if self.print_time:
+            print(f"start forward: {time.time()}")
+
         device = text_bits.device
 
-        print("before dwt")
+        if self.print_time:
+            print(f"before dwt: time:{time.time()}")
+
         freq_host_image = self.dwt(host_image)
 
         # place the model on the cpu for text_embedding
 
-        print("before text_embedding")
-        text_bits = text_bits.to("cpu")
+        if self.print_time:
+            print(f"before text_embedding: time:{time.time()}")
         secret_image = self.text_embedding(text_bits)
         secret_image = secret_image.to(device)
 
-        print("before dwt")
+        if self.print_time:
+            print(f"before dwt: time:{time.time()}")
+
         freq_secret_image = self.dwt(secret_image)
 
-        print("before image_embedding")
+        if self.print_time:
+            print(f"before image_embedding: time:{time.time()}")
         freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
 
-        print("before dwt")
+        if self.print_time:
+            print(f"before dwt: time:{time.time()}")
         container_image = self.dwt(freq_container, rev=True)
 
+        if self.print_time:
+            print(f"before attack: time:{time.time()}")
         return container_image
 
     def attack_image(self, container_image):
-        print("before attack")
         noised_image = self.attack(container_image)
-        print("after attack")
         return noised_image
 
     def reverse(self, noised_image):
+        if self.print_time:
+            print(f"start reversing: {time.time()}")
         device = noised_image.device
 
         r_container = noised_image
 
-        print("before dwt")
+        if self.print_time:
+            print(f"before dwt: {time.time()}")
         r_freq_container = self.dwt(r_container)
         r_freq_noise = torch.randn_like(r_freq_container)
 
-        print("before image_embedding")
+        if self.print_time:
+            print(f"before image_embedding: {time.time()}")
         r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
 
-        print("before dwt")
+        if self.print_time:
+            print(f"before dwt: {time.time()}")
         r_secret_image = self.dwt(r_freq_secret_image, rev=True)
 
-        print("before text_embedding")
-        r_secret_image = r_secret_image.to("cpu")
+        if self.print_time:
+            print("before text_embedding")
         r_text_bits = self.text_embedding(r_secret_image, rev=True)
-        r_text_bits = r_text_bits.to(device)
 
+        if self.print_time:
+            print(f"end reversing: {time.time()}")
         return r_text_bits
 
 

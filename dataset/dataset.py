@@ -12,6 +12,9 @@ class StegoDataset(Dataset):
         # store all the images path
         self.images_path = os.listdir(data_root)
 
+        self.images_path = [img for img in self.images_path if img.endswith('.png')]
+        self.images_path = self.images_path[:20]
+
         if len(self.images_path) == 0:
             raise Exception("No images found in the data_root")
 

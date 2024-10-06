@@ -9,6 +9,7 @@ from PIL import Image
 from torchvision import transforms
 from torchvision.transforms import ToTensor, ToPILImage
 import io
+from modules.diffjpeg import DiffJPEG
 
 
 class AttackModule(nn.Module):
@@ -211,7 +212,6 @@ class JPEGCompressionPRISAttack(AttackModule):
         output:
             output: a JPEG compressed tensor with shape [n, c, h, w]
         """
-        from DiffJPEG import DiffJPEG
 
         inputs = inputs * 255
         jpeg = DiffJPEG(self.height, self.width, differentiable=True)
