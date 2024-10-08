@@ -2,7 +2,10 @@
 import time
 
 import torch
+from scipy import stats
 from torch import nn
+
+from simulate_distribution import present_distribution
 from .text_embedding import RandomTextEmbedding, TextEmbeddingModule
 from .dwt import PRIS_DWT, DWTModule
 from .image_embedding import WeightedImageEmbedding, ImageEmbeddingModule
@@ -89,6 +92,8 @@ class OurModel(nn.Module):
             print(f"before image_embedding: time:{time.time()}")
         freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
 
+        present_distribution(freq_noise)
+
         if self.print_time:
             print(f"before dwt: time:{time.time()}")
         container_image = self.dwt(freq_container, rev=True)
@@ -111,14 +116,20 @@ class OurModel(nn.Module):
         if self.print_time:
             print(f"before dwt: {time.time()}")
         r_freq_container = self.dwt(r_container)
-        r_freq_noise = torch.randn_like(r_freq_container)
+
+        ## TODO the generated noise may not follow the gaussian distribution
+        # r_freq_noise = torch.randn_like(r_freq_container)
+
+        lambda_value = 2.50
+        r_freq_noise = torch.poisson(torch.full_like(r_freq_container, lambda_value))
+        r_freq_noise = r_freq_noise / 2.0 - 1.0
 
         if self.print_time:
             print(f"before image_embedding: {time.time()}")
         r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
 
         # apply the activation function
-        r_freq_secret_image = self.activation(r_freq_secret_image)
+        # r_freq_secret_image = self.activation(r_freq_secret_image)
 
         if self.print_time:
             print(f"before dwt: {time.time()}")

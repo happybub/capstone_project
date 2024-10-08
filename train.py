@@ -73,10 +73,10 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
 
     log_dir = config['LOG_DIR']
     # create the log file
-    os.makedirs(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}'), exist_ok=True)
-    with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'image_loss_log.txt'), 'w') as f:
+    os.makedirs(os.path.join(log_dir, f'mode {mode} epoch {epoch}'), exist_ok=True)
+    with open(os.path.join(log_dir, f'mode {mode} epoch {epoch}', 'image_loss_log.txt'), 'w') as f:
         f.write('\n'.join([str(item) for item in image_losses]))
-    with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'secret_loss_log.txt'), 'w') as f:
+    with open(os.path.join(log_dir, f'mode {mode} epoch {epoch}', 'secret_loss_log.txt'), 'w') as f:
         f.write('\n'.join([str(item) for item in secret_losses]))
 
 
