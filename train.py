@@ -6,7 +6,7 @@ import torch
 from utils import mse_loss
 from utils import load_class_by_name, get_config, pop_up_image
 from dataset.dataloader import get_dataloader
-from modules.model import OurModel
+from modules.model import OurModel, OurModel_DEBUG
 
 
 def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
@@ -26,8 +26,12 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
     lambda_image_loss = float(config['LAMBDA_IMAGE_LOSS'])
     lambda_secret_loss = float(config['LAMBDA_SECRET_LOSS'])
 
+    lambda_distribution_loss = float(config['LAMBDA_DISTRIBUTION_LOSS'])
+
     image_losses = []
     secret_losses = []
+
+    distribution_losses = []
     for i, images in enumerate(dataloader):
         # get the host images
         images = images.to(device=device)
@@ -39,23 +43,27 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
         with torch.set_grad_enabled(mode == 'train'):
 
             # forward pass
-            container_image = net(secret, images)
+            container_image, freq_noise = net(secret, images)
 
             # attack the images
             attacked_image = net.attack_image(container_image)
 
             # recover the secret message
-            recovered_secret = net.reverse(attacked_image)
+            recovered_secret, r_freq_noise = net.reverse(attacked_image)
 
             # calculate the loss
             if print_time:
                 print(f"calculating the loss: {time.time()}")
             image_loss = mse_loss(container_image, images)
             secret_loss = mse_loss(recovered_secret, secret)
+
+            # ADD distribution noise
+            distribution_loss = mse_loss(freq_noise, r_freq_noise)
+
             if print_time:
                 print(f"loss calculated: {time.time()}")
 
-            total_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
+            total_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss + lambda_distribution_loss * distribution_loss
 
             # backward pass
             if mode == 'train':
@@ -69,7 +77,9 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
 
         image_losses.append(image_loss.item())
         secret_losses.append(secret_loss.item())
-        print(f'Batch: #{i}, Image Loss: {image_loss.item()}, Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}')
+
+        distribution_losses.append(distribution_loss.item())
+        print(f'Batch: #{i}, Image Loss: {image_loss.item()}, Secret Loss: {secret_loss.item()}, Distribution Loss: {distribution_loss.item()}, Total Loss: {total_loss}')
 
     log_dir = config['LOG_DIR']
     # create the log file
@@ -92,10 +102,17 @@ def train(name, start_epoch, end_epoch, config):
     dwt = load_class_by_name(config_map['DWT_MODULE'])()
     image_embedding_module = load_class_by_name(config_map['IMAGE_EMBEDDING_MODULE'])(channels, image_height,
                                                                                       image_width)
+
     attack_module = load_class_by_name(config_map['ATTACK_MODULE'])()
 
     # construct the model
-    net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module).to(device=device)
+    # net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module).to(device=device)
+
+    # DEBUG area
+    text_embedding_module = load_class_by_name(config_map['TEXT_EMBEDDING_MODULE'])(num_bits, channels=1,
+                                                                                    width=image_width,
+                                                                                    height=image_height)
+    net = OurModel_DEBUG(text_embedding_module, dwt, image_embedding_module, attack_module).to(device=device)
 
     optim = torch.optim.Adam(net.parameters(), lr=float(config['LEARNING_RATE']), weight_decay=config['WEIGHT_DECAY'])
 

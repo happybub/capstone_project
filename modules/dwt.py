@@ -19,6 +19,31 @@ class DWTModule(nn.Module):
     def forward(self, image, rev=False):
         raise NotImplementedError("This method should be implemented by subclasses.")
 
+class NO_DWT(DWTModule):
+    """
+    Dummy DWT module that does nothing.
+
+    Forward:
+    Input: 4D tensor with shape (batch_size, channels, height, width)
+    Output: 4D tensor with shape (batch_size, 4 * channels, height // 2, width // 2)
+
+    Reverse:
+    Input: 4D tensor with shape (batch_size, 4 * channels, height // 2, width // 2)
+    Output: 4D tensor with shape (batch_size, channels, height, width)
+    """
+    def forward(self, x, rev=False):
+        assert x.dim() == 4, "Input must be a 4D tensor with shape (batch_size, channels, height, width)"
+        if not rev:
+            return self.transform(x)
+        else:
+            return self.reverse(x)
+
+    def transform(self, x):
+        return x.reshape(x.shape[0], x.shape[1] * 4, x.shape[2] // 2, x.shape[3] // 2)
+
+    def reverse(self, x):
+        return x.reshape(x.shape[0], x.shape[1] // 4, x.shape[2] * 2, x.shape[3] * 2)
+
 
 class PRIS_DWT(DWTModule):
     """

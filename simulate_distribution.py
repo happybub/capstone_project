@@ -121,6 +121,7 @@ def present_distribution(freq_noise):
     plt.title('Empirical Distribution of Frequency Noise')
     plt.legend()
     plt.show()
+    return all_data.mean(), all_data.std()
 
 
 if __name__ == '__main__':

@@ -232,12 +232,15 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         zeros_to_add = torch.zeros(b, num_zeros_to_add, dtype=bits.dtype, device=bits.device)
         x_padded = torch.cat((bits_repeated, zeros_to_add),dim=1)
         x_reshaped = x_padded.view(b, 1, self.width, self.height).repeat(1, self.channels, 1, 1)
+        x_reshaped = transform_gaussian(x_reshaped)
         return x_reshaped
 
     def reverse(self, result_tensor):
         b = result_tensor.shape[0]
         total_pixels = self.width * self.height
         k = total_pixels // self.n_bits
+
+        result_tensor = extract_gaussian(result_tensor)
 
         result_flat = result_tensor.view(b, self.channels, -1)
         result_1st_channel = result_flat[0:b, 0, :k * self.n_bits]
@@ -247,11 +250,17 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         mean_tensor = sum_tensor / k
         # threshold = k // 2
         # sum_tensor = (sum_tensor > threshold).float()
-
-
-
         return mean_tensor
 
+def transform_gaussian(tensor):
+    gaussian_tensor = torch.randn(tensor.size())
+    gaussian_tensor = torch.where(tensor == 1, gaussian_tensor.abs(), -gaussian_tensor.abs())
+    return gaussian_tensor
+
+def extract_gaussian(tensor):
+    mask = tensor >= 0
+    extracted_tensor = mask.float()
+    return extracted_tensor
 
 def fill_in(string_list, n_bits):
     length_to_fill = n_bits // 8
