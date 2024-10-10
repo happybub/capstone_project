@@ -147,7 +147,7 @@ class OurModel_DEBUG(nn.Module):
         self.activation = nn.Sigmoid()
 
         # debug area
-        self.save_noise = torch.zeros()
+        self.save_noise = torch.zeros(1)
         self.noise_mean = 0
         self.noise_std = 1
 
