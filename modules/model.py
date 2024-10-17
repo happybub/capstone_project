@@ -10,46 +10,6 @@ from .attack import GaussianNoiseAttack, AttackModule
 from utils import initialize_weights
 
 
-# TextEmbeddingModule -> DWTModule -> ImageEmbeddingModule -> AttackModule
-# Reverse: AttackModule -> ImageEmbeddingModule -> DWTModule -> TextEmbeddingModule
-class Stego(nn.Module):
-    def __init__(self, n_bits, channels, width, height):
-        super(Stego, self).__init__()
-        self.text_embedding = RandomTextEmbedding(n_bits, channels, width, height)
-        self.dwt = PRIS_DWT()
-        self.image_embedding = WeightedImageEmbedding(channels, width, height)
-        self.attack = GaussianNoiseAttack()
-
-    def forward(self, text_bits, host_image):
-        freq_host_image = self.dwt(host_image)
-
-        secret_image = self.text_embedding(text_bits)
-        secret_image = secret_image.unsqueeze(0)  # add the batch dimension
-        freq_secret_image = self.dwt(secret_image)
-
-        freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
-
-        # discard freq_noise
-        container_image = self.dwt(freq_container, rev=True)
-
-        noised_image = self.attack(container_image)
-
-        r_container = noised_image
-        r_freq_container = self.dwt(r_container)
-
-        # draw the r_freq_noise from Gaussian distribution
-        r_freq_noise = torch.randn_like(r_freq_container)
-
-        r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
-
-        # discard the host image
-        r_secret_image = self.dwt(r_freq_secret_image, rev=True)
-
-        r_text_bits = self.text_embedding(r_secret_image, rev=True)
-
-        return r_text_bits
-
-
 class OurModel(nn.Module):
     def __init__(self, text_embedding: TextEmbeddingModule, dwt: DWTModule, image_embedding: ImageEmbeddingModule,
                  attack: AttackModule):
@@ -58,79 +18,47 @@ class OurModel(nn.Module):
         self.dwt = dwt
         self.image_embedding = image_embedding
         self.attack = attack
-        self.print_time = True
-        self.activation = nn.Sigmoid()
 
 
-    def forward(self, text_bits, host_image):
-        if self.print_time:
-            print(f"start forward: {time.time()}")
-
+    def forward(self, text_bits, host_image, return_extracted_secret=False):
         device = text_bits.device
-
-        if self.print_time:
-            print(f"before dwt: time:{time.time()}")
 
         freq_host_image = self.dwt(host_image)
 
         # place the model on the cpu for text_embedding
 
-        if self.print_time:
-            print(f"before text_embedding: time:{time.time()}")
         secret_image = self.text_embedding(text_bits)
         secret_image = secret_image.to(device)
 
-        if self.print_time:
-            print(f"before dwt: time:{time.time()}")
-
         freq_secret_image = self.dwt(secret_image)
 
-        if self.print_time:
-            print(f"before image_embedding: time:{time.time()}")
         freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
 
-        if self.print_time:
-            print(f"before dwt: time:{time.time()}")
         container_image = self.dwt(freq_container, rev=True)
 
-        if self.print_time:
-            print(f"before attack: time:{time.time()}")
+        if return_extracted_secret:
+            return container_image, freq_noise
+
         return container_image
 
     def attack_image(self, container_image):
         noised_image = self.attack(container_image)
         return noised_image
 
-    def reverse(self, noised_image):
-        if self.print_time:
-            print(f"start reversing: {time.time()}")
-        device = noised_image.device
-
+    def reverse(self, noised_image, extracted_secret=None):
         r_container = noised_image
 
-        if self.print_time:
-            print(f"before dwt: {time.time()}")
         r_freq_container = self.dwt(r_container)
-        r_freq_noise = torch.randn_like(r_freq_container)
 
-        if self.print_time:
-            print(f"before image_embedding: {time.time()}")
+        r_freq_noise = torch.randn_like(extracted_secret)
+
         r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
 
-        # apply the activation function
-        r_freq_secret_image = self.activation(r_freq_secret_image)
-
-        if self.print_time:
-            print(f"before dwt: {time.time()}")
         r_secret_image = self.dwt(r_freq_secret_image, rev=True)
 
-        if self.print_time:
-            print("before text_embedding")
         r_text_bits = self.text_embedding(r_secret_image, rev=True)
 
-        if self.print_time:
-            print(f"end reversing: {time.time()}")
-        return r_text_bits
+        return r_text_bits, r_freq_noise
 
 
 class ResidualDenseBlock_out(nn.Module):
@@ -142,6 +70,7 @@ class ResidualDenseBlock_out(nn.Module):
         self.conv4 = nn.Conv2d(input + 3 * 32, 32, 3, 1, 1, bias=bias)
         self.conv5 = nn.Conv2d(input + 4 * 32, output, 3, 1, 1, bias=bias)
         self.lrelu = nn.LeakyReLU(inplace=True)
+
         # initialization
         initialize_weights([self.conv5], 0.)
 
@@ -263,25 +192,3 @@ class Hinet(ImageEmbeddingModule):
         x = out[:, :len, :, :]
         y = out[:, len:, :, :]
         return x, y
-
-
-if __name__ == "__main__":
-    # test the model
-    model = Stego(10, 3, 224, 224)
-
-    # read an sample host image
-    from PIL import Image
-    from torchvision import transforms
-
-    host_image_file = Image.open("../data/train/host.jpg")
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor()
-    ])
-
-    # (3, 224, 224)
-    host_image = transform(host_image_file).unsqueeze(0)
-    secret_text = torch.randint(0, 2, (10,))
-
-    predicted_text = model(secret_text, host_image)
-    print(predicted_text)

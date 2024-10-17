@@ -134,8 +134,6 @@ class TextEmbeddingModule(nn.Module):
         self.width = width
         self.height = height
 
-        self.linear = nn.Linear(n_bits, channels * width * height)
-
     def forward(self, x, rev=False):
         if not rev:
             return self.transform(x)
@@ -152,7 +150,6 @@ class TextEmbeddingModule(nn.Module):
 class RandomTextEmbedding(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):
         super().__init__(n_bits, channels, width, height)
-        self.linear = nn.Linear(n_bits, channels * width * height)
 
     def forward(self, x, rev=False):
         if not rev:
@@ -172,7 +169,6 @@ class RandomTextEmbedding(TextEmbeddingModule):
 class LinearTextEmbedding(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):
         super().__init__(n_bits, channels, width, height)
-        self.linear = nn.Linear(n_bits, channels * width * height)
 
     def forward(self, x, rev=False):
         if not rev:
@@ -218,8 +214,6 @@ class LinearTextEmbedding(TextEmbeddingModule):
 class LinearTextEmbedding1(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):
         super().__init__(n_bits, channels, width, height)
-        self.linear = nn.Linear(n_bits, channels * width * height)
-
 
     def transform(self, bits):
         b = bits.shape[0]
@@ -247,8 +241,6 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         mean_tensor = sum_tensor / k
         # threshold = k // 2
         # sum_tensor = (sum_tensor > threshold).float()
-
-
 
         return mean_tensor
 

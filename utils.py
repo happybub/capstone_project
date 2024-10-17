@@ -24,27 +24,53 @@ def get_config(parser=None):
     return config_map
 
 
-def pop_up_image(image):
+def pop_up_image(batch_images):
     """
     Input shape: (batch_size, 3, height, width)
     """
-    image = image.squeeze(0)
-    image = image.permute(1, 2, 0)
-    image_npy = image.detach().cpu().numpy()
 
-    # normalize the image
-    image_npy = (image_npy - image_npy.min()) / (image_npy.max() - image_npy.min())
+    # 将批次中的每张图像从 (3, height, width) 转置为 (height, width, 3)
+    batch_images = batch_images.permute(0, 2, 3, 1)
 
-    # round the image
-    image_npy = np.round(image_npy * 255).astype(np.uint8)
+    # 将图像从张量转换为numpy数组
+    batch_images_npy = batch_images.detach().cpu().numpy()
 
-    # plot the image
-    plt.imshow(image_npy)
+    # 归一化每个图像
+    batch_images_npy = (batch_images_npy - batch_images_npy.min(axis=(1, 2, 3), keepdims=True)) / \
+                       (batch_images_npy.max(axis=(1, 2, 3), keepdims=True) - batch_images_npy.min(axis=(1, 2, 3),
+                                                                                                   keepdims=True))
+
+    # 将归一化后的值转换为0-255的整数用于显示
+    batch_images_npy = np.round(batch_images_npy * 255).astype(np.uint8)
+
+    # 获取批次大小和图像尺寸
+    batch_size, height, width, _ = batch_images_npy.shape
+
+    # 创建一个足够大的画布显示所有图像
+    ncols = int(np.ceil(np.sqrt(batch_size)))  # 确定列数
+    nrows = int(np.ceil(batch_size / ncols))  # 确定行数
+
+    # 设置画布大小
+    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 2, nrows * 2))
+
+    # 如果只有一个图像，ax不会是数组
+    if nrows == 1 and ncols == 1:
+        ax.imshow(batch_images_npy[0])
+    else:
+        for i in range(nrows):
+            for j in range(ncols):
+                idx = i * ncols + j
+                if idx < batch_size:
+                    ax[i, j].imshow(batch_images_npy[idx])
+                    ax[i, j].axis('off')  # 不显示坐标轴
+                else:
+                    ax[i, j].axis('off')  # 对于没有图像的部分也不显示坐标轴
+
     plt.show()
 
 
 def mse_loss(a, b):
-    loss_fn = torch.nn.MSELoss(reduce=True, size_average=True)
+    loss_fn = torch.nn.MSELoss(reduce=True)
     loss = loss_fn(a, b)
     return loss
 

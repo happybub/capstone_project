@@ -9,9 +9,7 @@ from dataset.dataloader import get_dataloader
 from modules.model import OurModel
 
 
-def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
-    print_time = config['PRINT_TIME']
-    net.print_time = print_time
+def train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_logs=[]):
     if mode == 'train':
         dataloader = dataloader_map['train']
         net.train()
@@ -28,6 +26,7 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
 
     image_losses = []
     secret_losses = []
+
     for i, images in enumerate(dataloader):
         # get the host images
         images = images.to(device=device)
@@ -39,37 +38,36 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
         with torch.set_grad_enabled(mode == 'train'):
 
             # forward pass
-            container_image = net(secret, images)
+            container_image, extracted_secret = net(secret, images, return_extracted_secret=True)
 
             # attack the images
             attacked_image = net.attack_image(container_image)
 
             # recover the secret message
-            recovered_secret = net.reverse(attacked_image)
+            recovered_secret, sampled_secret = net.reverse(attacked_image, extracted_secret=extracted_secret)
+            if i == 0:
+                noise_logs.append((extracted_secret[0], sampled_secret[0]))
+
+            # to test, we directly use the oringal text as the recovered text
+            # recovered_secret = secret
 
             # calculate the loss
-            if print_time:
-                print(f"calculating the loss: {time.time()}")
             image_loss = mse_loss(container_image, images)
             secret_loss = mse_loss(recovered_secret, secret)
-            if print_time:
-                print(f"loss calculated: {time.time()}")
 
             total_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
+            bit_acc = (recovered_secret.round() == secret).float().mean()
 
             # backward pass
             if mode == 'train':
-                if print_time:
-                    print(f"start backward: {time.time()}")
                 optim.zero_grad()
                 total_loss.backward()
                 optim.step()
-                if print_time:
-                    print(f"end backward: {time.time()}")
 
         image_losses.append(image_loss.item())
         secret_losses.append(secret_loss.item())
-        print(f'Batch: #{i}, Image Loss: {image_loss.item()}, Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}')
+        print(f'Batch: #{i}, Mode: {mode}, Image Loss: {image_loss.item()}, '
+              f'Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}, Bit accuracy: {bit_acc}')
 
     log_dir = config['LOG_DIR']
     # create the log file
@@ -79,15 +77,55 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train'):
     with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'secret_loss_log.txt'), 'w') as f:
         f.write('\n'.join([str(item) for item in secret_losses]))
 
+    return noise_logs
+
 
 def train(name, start_epoch, end_epoch, config):
-    # load the config
-    channels, image_height, image_width = int(config['CHANNELS']), int(config['IMAGE_HEIGHT']), int(config['IMAGE_WIDTH'])
+    net = construct_model_from_config(config)
+    optim = torch.optim.Adam(net.parameters(), lr=float(config['LEARNING_RATE']), weight_decay=config['WEIGHT_DECAY'])
+
+    # get the dataloader
+    dataloader_map = get_dataloader(config)
+
+    # create the dictionary for the training
+    checkpoints_path = str(config['CHECKPOINTS_PATH'])
+    os.makedirs(os.path.join(checkpoints_path, name), exist_ok=True)
+
+    # get the save frequency
+    save_freq = config['SAVE_FREQ']
+
+    # for debugging
+    noise_logs = []
+
+    for epoch in range(start_epoch, end_epoch + 1):
+        # if the model is saved, load the model
+        load_state_from_checkpoint(net, optim, checkpoints_path, name, epoch)
+
+        # continue the training
+        print("Training epoch: ", epoch)
+        noise_logs = train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_logs=noise_logs)
+
+        # validate the model
+        print("Validating epoch: ", epoch)
+        train_epoch(net, optim, dataloader_map, config, epoch, mode='val')
+
+        # save the state dict
+        if save_freq != -1 and epoch % save_freq == 0:
+            save_state_to_checkpoint(net, optim, checkpoints_path, name, epoch)
+
+    pop_up_image(torch.stack([p[0] for p in noise_logs], dim=0))
+    pop_up_image(torch.stack([p[1] for p in noise_logs], dim=0))
+
+
+def construct_model_from_config(config):
+    channels, image_height, image_width = int(config['CHANNELS']), int(config['IMAGE_HEIGHT']), int(
+        config['IMAGE_WIDTH'])
     num_bits = config['NUM_BITS']
     device = config['DEVICE']
 
     # construct the modules
-    text_embedding_module = load_class_by_name(config_map['TEXT_EMBEDDING_MODULE'])(num_bits, channels=1, width=image_width,
+    text_embedding_module = load_class_by_name(config_map['TEXT_EMBEDDING_MODULE'])(num_bits, channels=1,
+                                                                                    width=image_width,
                                                                                     height=image_height)
     dwt = load_class_by_name(config_map['DWT_MODULE'])()
     image_embedding_module = load_class_by_name(config_map['IMAGE_EMBEDDING_MODULE'])(channels, image_height,
@@ -96,36 +134,71 @@ def train(name, start_epoch, end_epoch, config):
 
     # construct the model
     net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module).to(device=device)
+    return net
 
-    optim = torch.optim.Adam(net.parameters(), lr=float(config['LEARNING_RATE']), weight_decay=config['WEIGHT_DECAY'])
 
-    # create the dictionary for the training
-    checkpoints_path = str(config['CHECKPOINTS_PATH'])
-    os.makedirs(os.path.join(checkpoints_path, name), exist_ok=True)
+def load_state_from_checkpoint(net, optim, checkpoints_path, name: str, epoch):
+    expected_model_path = os.path.join(checkpoints_path, name, f'{epoch}.pth')
+    if epoch > 0 and os.path.exists(expected_model_path):
+        net.load_state_dict(torch.load(expected_model_path))
+        print(f'Load the model from {epoch}.pth')
+    else:
+        print(f'No model found in {epoch}.pth')
 
-    # get the dataloader
-    dataloader_map = get_dataloader(config)
-
-    for epoch in range(start_epoch, end_epoch):
-        # if the model is saved, load the model
-        expected_model_path = os.path.join(checkpoints_path, name, f'{epoch - 1}.pth')
-        expected_optim_path = os.path.join(checkpoints_path, name, f'{epoch - 1}_optim.pth')
-        if epoch > 0 and os.path.exists(expected_model_path) and os.path.exists(expected_optim_path):
-            net.load_state_dict(torch.load(expected_model_path))
+    if optim is not None:
+        expected_optim_path = os.path.join(checkpoints_path, name, f'{epoch}_optim.pth')
+        if epoch > 0 and os.path.exists(expected_optim_path):
             optim.load_state_dict(torch.load(expected_optim_path))
-            print(f'Load the model and the optimizer from {epoch - 1}.pth')
+            print(f'Load the optimizer from {epoch}_optim.pth')
+        else:
+            print(f'No optimizer found in {epoch}_optim.pth')
 
-        # continue the training
-        train_epoch(net, optim, dataloader_map, config, epoch, mode='train')
 
-        # validate the model
-        train_epoch(net, optim, dataloader_map, config, epoch, mode='val')
+def save_state_to_checkpoint(net, optim, checkpoints_path, name: str, epoch):
+    torch.save(net.state_dict(), os.path.join(checkpoints_path, name, f'{epoch}.pth'))
+    torch.save(optim.state_dict(), os.path.join(checkpoints_path, name, f'{epoch}_optim.pth'))
 
-        # save the state dict
-        save_freq = config['SAVE_FREQ']
-        if epoch % save_freq == 0:
-            torch.save(net.state_dict(), os.path.join(checkpoints_path, name, f'{epoch}.pth'))
-            torch.save(optim.state_dict(), os.path.join(checkpoints_path, name, f'{epoch}_optim.pth'))
+
+def validation(config):
+    net = construct_model_from_config(config)
+
+    checkpoints_path = str(config['CHECKPOINTS_PATH'])
+    name = '241017_224819'
+    batch = config['VAL_BATCH_SIZE']
+    num_bits = config['NUM_BITS']
+    device = config['DEVICE']
+    load_state_from_checkpoint(net, None, checkpoints_path, name, 50)
+
+    net.eval()
+
+    secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
+
+    dataloader = get_dataloader(config)['val']
+
+    # generate the host images
+    for i, images in enumerate(dataloader):
+        images = images.to(device=device)
+        pop_up_image(images)
+
+        container_image, extracted_secret = net(secret, images, return_extracted_secret=True)
+        pop_up_image(container_image)
+        pop_up_image(extracted_secret)
+
+        attacked_image = net.attack_image(container_image)
+
+        recovered_secret, sampled_secret = net.reverse(attacked_image, extracted_secret=extracted_secret)
+        pop_up_image(sampled_secret)
+
+        bit_acc = (recovered_secret.round() == secret).float().mean()
+        print(f'Batch: #{i}, Bit accuracy: {bit_acc}')
+        break
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -136,6 +209,7 @@ if __name__ == '__main__':
     time_str = time.strftime("%y%m%d_%H%M%S")
     name = time_str
     start_epoch = 1
-    end_epoch = 100
+    end_epoch = 50
 
-    train(name, start_epoch, end_epoch, config_map)
+    # train(name, start_epoch, end_epoch, config_map)
+    validation(config_map)
