@@ -1,3 +1,4 @@
+import json
 import os
 import time
 
@@ -24,8 +25,12 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_l
     lambda_image_loss = float(config['LAMBDA_IMAGE_LOSS'])
     lambda_secret_loss = float(config['LAMBDA_SECRET_LOSS'])
 
-    image_losses = []
-    secret_losses = []
+    losses = {
+        'image_losses': [],
+        'secret_losses': [],
+        'total_losses': [],
+        'bit_acc': []
+    }
 
     for i, images in enumerate(dataloader):
         # get the host images
@@ -64,20 +69,22 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_l
                 total_loss.backward()
                 optim.step()
 
-        image_losses.append(image_loss.item())
-        secret_losses.append(secret_loss.item())
+        losses['image_losses'].append(image_loss.item())
+        losses['secret_losses'].append(secret_loss.item())
+        losses['total_losses'].append(total_loss.item())
+        losses['bit_acc'].append(bit_acc.item())
         print(f'Batch: #{i}, Mode: {mode}, Image Loss: {image_loss.item()}, '
               f'Secret Loss: {secret_loss.item()}, Total Loss: {total_loss}, Bit accuracy: {bit_acc}')
 
-    log_dir = config['LOG_DIR']
-    # create the log file
-    os.makedirs(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}'), exist_ok=True)
-    with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'image_loss_log.txt'), 'w') as f:
-        f.write('\n'.join([str(item) for item in image_losses]))
-    with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'secret_loss_log.txt'), 'w') as f:
-        f.write('\n'.join([str(item) for item in secret_losses]))
+    # log_dir = config['LOG_DIR']
+    # # create the log file
+    # os.makedirs(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}'), exist_ok=True)
+    # with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'image_loss_log.txt'), 'w') as f:
+    #     f.write('\n'.join([str(item) for item in image_losses]))
+    # with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'secret_loss_log.txt'), 'w') as f:
+    #     f.write('\n'.join([str(item) for item in secret_losses]))
 
-    return noise_logs
+    return noise_logs, losses
 
 
 def train(name, start_epoch, end_epoch, config):
@@ -97,17 +104,30 @@ def train(name, start_epoch, end_epoch, config):
     # for debugging
     noise_logs = []
 
+    # for logs
+    log_dir = config['LOG_DIR']
+
     for epoch in range(start_epoch, end_epoch + 1):
         # if the model is saved, load the model
         load_state_from_checkpoint(net, optim, checkpoints_path, name, epoch)
 
         # continue the training
         print("Training epoch: ", epoch)
-        noise_logs = train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_logs=noise_logs)
+        noise_logs, losses = train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_logs=noise_logs)
 
         # validate the model
         print("Validating epoch: ", epoch)
-        train_epoch(net, optim, dataloader_map, config, epoch, mode='val')
+        _, losses_valid = train_epoch(net, optim, dataloader_map, config, epoch, mode='val')
+
+        # save the logs
+        log_file_path = os.path.join(log_dir, 'training_logs.json')
+        log_data = {
+            'epoch': epoch,
+            'train_losses': losses,
+            'val_losses': losses_valid
+        }
+        with open(log_file_path, 'a') as log_file:
+            log_file.write(json.dumps(log_data) + '\n')
 
         # save the state dict
         if save_freq != -1 and epoch % save_freq == 0:
@@ -211,5 +231,5 @@ if __name__ == '__main__':
     start_epoch = 1
     end_epoch = 50
 
-    # train(name, start_epoch, end_epoch, config_map)
+    train(name, start_epoch, end_epoch, config_map)
     validation(config_map)
