@@ -121,12 +121,13 @@ class SaltAndPepperNoiseAttack(AttackModule):
         self.pepper_prob = pepper_prob
 
     def forward(self, image):
+        device = image.device
         c, h, w = image.shape
-        zero_matrix = torch.zeros(h, w)
+        zero_matrix = torch.zeros(h, w, device=device)
         total_pixels = zero_matrix.numel()
         modify_count_salt = int(total_pixels * self.salt_prob)
         modify_count_pepper = int(total_pixels * self.pepper_prob)
-        total_perm = torch.randperm(total_pixels)
+        total_perm = torch.randperm(total_pixels, device=device)
 
         indices512 = total_perm[:modify_count_pepper]
         indices_neg512 = total_perm[total_pixels - modify_count_salt:]
@@ -151,8 +152,9 @@ class SaltAndPepperNoiseAttackBatch(AttackModule):
         self.pepper_prob = pepper_prob
 
     def forward(self, image):
+        device = image.device
         n, c, h, w = image.shape
-        zero_matrix = torch.zeros(h, w)
+        zero_matrix = torch.zeros(h, w, device=device)
         total_pixels = zero_matrix.numel()
         modify_count_salt = int(total_pixels * self.salt_prob)
         modify_count_pepper = int(total_pixels * self.pepper_prob)
@@ -212,14 +214,15 @@ class JPEGCompressionPRISAttack(AttackModule):
         output:
             output: a JPEG compressed tensor with shape [n, c, h, w]
         """
-
         inputs = inputs * 255
-        jpeg = DiffJPEG(self.height, self.width, differentiable=True)
+        device = inputs.device
+        jpeg = DiffJPEG(self.height, self.width, differentiable=True, device=device)
         quality = self.quality
         jpeg.set_quality(quality)
         outputs = jpeg(inputs)
 
         return outputs / 255.
+
 
 class MultiAttack(AttackModule):
     """

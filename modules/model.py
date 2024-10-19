@@ -42,7 +42,9 @@ class OurModel(nn.Module):
         return container_image
 
     def attack_image(self, container_image):
-        noised_image = self.attack(container_image)
+        device = container_image.device
+        container_image = container_image.to(device)
+        noised_image = self.attack(container_image.to(device))
         return noised_image
 
     def reverse(self, noised_image, extracted_secret=None):

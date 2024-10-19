@@ -4,7 +4,7 @@ CHECKPOINTS_PATH = './checkpoints'
 DATASET_TRAIN_FOLDER = "DIV2K_train_HR"
 DATASET_TEST_FOLDER = "DIV2K_valid_HR"
 
-LOG_DIR = './logs'
+LOG_DIR = './logs_20241019'
 
 TRAIN_BATCH_SIZE = 4
 VAL_BATCH_SIZE = 4
@@ -20,14 +20,14 @@ LAMBDA_SECRET_LOSS = 0.5
 SAVE_FREQ = 10
 
 NUM_BITS = 1024
-DEVICE = 'cpu'
+DEVICE = 'cuda'
 
 # TEXT_EMBEDDING_MODULE = 'modules.text_embedding.LinearTextEmbedding1'
 TEXT_EMBEDDING_MODULE = 'modules.text_embedding.LinearTextEmbedding1'
 DWT_MODULE = 'modules.dwt.PRIS_DWT'
 # IMAGE_EMBEDDING_MODULE = 'modules.image_embedding.WeightedImageEmbedding'
 IMAGE_EMBEDDING_MODULE = 'modules.model.Hinet'
-ATTACK_MODULE = 'modules.attack.NoneAttack'
+ATTACK_MODULE = 'modules.attack.MultiAttack'
 
 LEARNING_RATE = 10 ** (-4.5)
 WEIGHT_DECAY = 1e-5

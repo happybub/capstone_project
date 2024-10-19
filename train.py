@@ -106,10 +106,11 @@ def train(name, start_epoch, end_epoch, config):
 
     # for logs
     log_dir = config['LOG_DIR']
+    os.makedirs(log_dir, exist_ok=True)
 
     for epoch in range(start_epoch, end_epoch + 1):
         # if the model is saved, load the model
-        load_state_from_checkpoint(net, optim, checkpoints_path, name, epoch)
+        load_state_from_checkpoint(net, optim, checkpoints_path, name, epoch, config['DEVICE'])
 
         # continue the training
         print("Training epoch: ", epoch)
@@ -157,10 +158,11 @@ def construct_model_from_config(config):
     return net
 
 
-def load_state_from_checkpoint(net, optim, checkpoints_path, name: str, epoch):
+def load_state_from_checkpoint(net, optim, checkpoints_path, name: str, epoch, device):
     expected_model_path = os.path.join(checkpoints_path, name, f'{epoch}.pth')
     if epoch > 0 and os.path.exists(expected_model_path):
-        net.load_state_dict(torch.load(expected_model_path))
+        # net.load_state_dict(torch.load(expected_model_path))
+        net.load_state_dict(torch.load(expected_model_path, map_location=torch.device(device)))
         print(f'Load the model from {epoch}.pth')
     else:
         print(f'No model found in {epoch}.pth')
@@ -168,7 +170,8 @@ def load_state_from_checkpoint(net, optim, checkpoints_path, name: str, epoch):
     if optim is not None:
         expected_optim_path = os.path.join(checkpoints_path, name, f'{epoch}_optim.pth')
         if epoch > 0 and os.path.exists(expected_optim_path):
-            optim.load_state_dict(torch.load(expected_optim_path))
+            # optim.load_state_dict(torch.load(expected_optim_path))
+            optim.load_state_dict(torch.load(expected_optim_path, map_location=torch.device(device)))
             print(f'Load the optimizer from {epoch}_optim.pth')
         else:
             print(f'No optimizer found in {epoch}_optim.pth')
@@ -183,11 +186,11 @@ def validation(config):
     net = construct_model_from_config(config)
 
     checkpoints_path = str(config['CHECKPOINTS_PATH'])
-    name = '241017_224819'
+    name = '241018_191855'
     batch = config['VAL_BATCH_SIZE']
     num_bits = config['NUM_BITS']
     device = config['DEVICE']
-    load_state_from_checkpoint(net, None, checkpoints_path, name, 50)
+    load_state_from_checkpoint(net, None, checkpoints_path, name, 60, device)
 
     net.eval()
 
@@ -229,7 +232,7 @@ if __name__ == '__main__':
     time_str = time.strftime("%y%m%d_%H%M%S")
     name = time_str
     start_epoch = 1
-    end_epoch = 50
+    end_epoch = 70
 
     train(name, start_epoch, end_epoch, config_map)
     validation(config_map)
