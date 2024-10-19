@@ -85,10 +85,10 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_l
     # with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'secret_loss_log.txt'), 'w') as f:
     #     f.write('\n'.join([str(item) for item in secret_losses]))
 
-    losses['image_losses'] = losses['image_losses'].mean()
-    losses['secret_losses'] = losses['secret_losses'].mean()
-    losses['total_losses'] = losses['total_losses'].mean()
-    losses['bit_acc'] = losses['bit_acc'].mean()
+    losses['image_losses'] = torch.mean(torch.tensor(losses['image_losses']))
+    losses['secret_losses'] = torch.mean(torch.tensor(losses['secret_losses']))
+    losses['total_losses'] = torch.mean(torch.tensor(losses['total_losses']))
+    losses['bit_acc'] = torch.mean(torch.tensor(losses['bit_acc']))
     return noise_logs, losses
 
 
@@ -132,8 +132,8 @@ def train(name, start_epoch, end_epoch, config):
         # save the logs
         log_data = {
             'epoch': epoch,
-            'train_losses': losses,
-            'val_losses': losses_valid
+            'train_losses': {k: v.item() for k, v in losses.items()},
+            'val_losses': {k: v.item() for k, v in losses_valid.items()}
         }
         with open(log_file_path, 'a') as log_file:
             log_file.write(json.dumps(log_data) + '\n')
