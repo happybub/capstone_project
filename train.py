@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import time
@@ -84,6 +85,10 @@ def train_epoch(net, optim, dataloader_map, config, epoch, mode='train', noise_l
     # with open(os.path.join(log_dir, f'mode: {mode} epoch: {epoch}', 'secret_loss_log.txt'), 'w') as f:
     #     f.write('\n'.join([str(item) for item in secret_losses]))
 
+    losses['image_losses'] = losses['image_losses'].mean()
+    losses['secret_losses'] = losses['secret_losses'].mean()
+    losses['total_losses'] = losses['total_losses'].mean()
+    losses['bit_acc'] = losses['bit_acc'].mean()
     return noise_logs, losses
 
 
@@ -108,6 +113,10 @@ def train(name, start_epoch, end_epoch, config):
     log_dir = config['LOG_DIR']
     os.makedirs(log_dir, exist_ok=True)
 
+    log_file_path = os.path.join(log_dir, 'training_logs.json')
+    with open(log_file_path, 'a') as log_file:
+        log_file.write(json.dumps(config) + '\n')
+
     for epoch in range(start_epoch, end_epoch + 1):
         # if the model is saved, load the model
         load_state_from_checkpoint(net, optim, checkpoints_path, name, epoch, config['DEVICE'])
@@ -121,7 +130,6 @@ def train(name, start_epoch, end_epoch, config):
         _, losses_valid = train_epoch(net, optim, dataloader_map, config, epoch, mode='val')
 
         # save the logs
-        log_file_path = os.path.join(log_dir, 'training_logs.json')
         log_data = {
             'epoch': epoch,
             'train_losses': losses,
@@ -224,15 +232,30 @@ def validation(config):
 
 
 
+# if __name__ == '__main__':
+#     config_map = get_config()
+#     print(config_map)
+#
+#     # get the time in format yyyymmdd:HHMMSS
+#     time_str = time.strftime("%y%m%d_%H%M%S")
+#     name = time_str
+#     start_epoch = 1
+#     end_epoch = 70
+#
+#     train(name, start_epoch, end_epoch, config_map)
+#     validation(config_map)
+
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Training script parameters')
+    parser.add_argument('--name', type=str, default=time.strftime("%y%m%d_%H%M%S"),
+                        help='Name for the training session')
+    parser.add_argument('--start_epoch', type=int, default=1, help='Starting epoch')
+    parser.add_argument('--end_epoch', type=int, default=70, help='Ending epoch')
+
+    args = parser.parse_args()
+
     config_map = get_config()
     print(config_map)
 
-    # get the time in format yyyymmdd:HHMMSS
-    time_str = time.strftime("%y%m%d_%H%M%S")
-    name = time_str
-    start_epoch = 1
-    end_epoch = 70
-
-    train(name, start_epoch, end_epoch, config_map)
+    train(args.name, args.start_epoch, args.end_epoch, config_map)
     validation(config_map)
