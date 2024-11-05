@@ -19,8 +19,7 @@ class OurModel(nn.Module):
         self.image_embedding = image_embedding
         self.attack = attack
 
-
-    def forward(self, text_bits, host_image, return_extracted_secret=False):
+    def forward(self, text_bits, host_image):
         device = text_bits.device
 
         freq_host_image = self.dwt(host_image)
@@ -32,25 +31,22 @@ class OurModel(nn.Module):
 
         freq_secret_image = self.dwt(secret_image)
 
-        freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
+        freq_container, discarded = self.image_embedding(freq_host_image, freq_secret_image)
 
         container_image = self.dwt(freq_container, rev=True)
 
-        if return_extracted_secret:
-            return container_image, freq_noise
-
-        return container_image
+        return container_image, secret_image, discarded.shape
 
     def attack_image(self, container_image):
         noised_image = self.attack(container_image)
         return noised_image
 
-    def reverse(self, noised_image, extracted_secret=None):
+    def reverse(self, noised_image, sampled_shape):
         r_container = noised_image
 
         r_freq_container = self.dwt(r_container)
 
-        r_freq_noise = torch.randn_like(extracted_secret)
+        r_freq_noise = torch.randn(sampled_shape).to(r_freq_container.device)
 
         r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
 
@@ -58,7 +54,7 @@ class OurModel(nn.Module):
 
         r_text_bits = self.text_embedding(r_secret_image, rev=True)
 
-        return r_text_bits, r_freq_noise
+        return r_text_bits, r_secret_image
 
 
 class ResidualDenseBlock_out(nn.Module):
@@ -192,3 +188,6 @@ class Hinet(ImageEmbeddingModule):
         x = out[:, :len, :, :]
         y = out[:, len:, :, :]
         return x, y
+
+    import torch
+    from torch import nn

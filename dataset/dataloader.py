@@ -93,7 +93,9 @@ def get_dataloader(config_map):
 
     train_len = len(train_dataset)
 
-    train_dataset, val_dataset = random_split(train_dataset, [int(train_len * 0.8), train_len - int(train_len * 0.8)])
+    train_test_split = float(config_map["TRAIN_TEST_SPLIT"])
+
+    train_dataset, val_dataset = random_split(train_dataset, [int(train_len * train_test_split), train_len - int(train_len * train_test_split)])
 
     # construct the train, val, and test dataloader
     train_dataloader = DataLoader(train_dataset, batch_size=config_map["TRAIN_BATCH_SIZE"], shuffle=True, num_workers=0)
