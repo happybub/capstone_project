@@ -47,10 +47,10 @@ def train_epoch(model, dataloader_map, config, epoch, mode='train'):
             recovered_secret, recovered_secret_image = net.reverse(attacked_image, sampled_shape=discarded_shape)
             bit_acc = (recovered_secret.round() == secret).float().mean()
 
-            if i == 0:
-                pop_up_image(images)
+            # if i == 0:
+                # pop_up_image(images)
                 # pop_up_image(secret_image)
-                pop_up_image(container_image)
+                # pop_up_image(container_image)
                 # pop_up_image(attacked_image)
                 # pop_up_image(recovered_secret_image)
 
@@ -90,9 +90,8 @@ def train_epoch(model, dataloader_map, config, epoch, mode='train'):
 
             # train the generator on the stego loss
             image_loss = mse_loss(container_image, images)
-            # image_loss = 0
             secret_loss = mse_loss(recovered_secret, secret)
-            stego_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
+            stego_loss = lambda_secret_loss * secret_loss
 
             if mode == 'train' and not GAN:
                 # Since the backward of the fool_loss and stego_loss share some parts of the computation graph,
@@ -108,9 +107,9 @@ def train_epoch(model, dataloader_map, config, epoch, mode='train'):
 
             if mode == 'train':
                 optim.step()
-                # pass
 
-        print(f'Batch: #{i}, Mode: {mode}, , '
+
+        print(f'Batch: #{i}, Mode: {mode}, Image: {image_loss}, '
               f'Secret: {secret_loss.item()}, Total: {stego_loss.item()}, Acc: {bit_acc} ' +
               f'Real: {real_loss.item()}, Fake: {fake_loss.item()}, Fool: {fool_loss}' if GAN else '')
 
@@ -208,10 +207,12 @@ if __name__ == '__main__':
     # get the time in format yyyymmdd:HHMMSS
     # time_str = time.strftime("%y%m%d_%H%M%S")
     # name = time_str
-    plan_name = '50_gen_20_dis'
-    # name = 'test_gan_1'
+    # plan_name = '50_gen_20_dis'
+    # start_epoch = 0
+    # end_epoch = 30
+    plan_name = 'gan'
     start_epoch = 0
-    end_epoch = 30
+    end_epoch = 50
 
     train(plan_name, start_epoch, end_epoch, config_map)
     # validation(config_map)
