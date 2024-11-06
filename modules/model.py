@@ -1,13 +1,12 @@
 # define the model
-import time
 
 import torch
 from torch import nn
-from .text_embedding import RandomTextEmbedding, TextEmbeddingModule
-from .dwt import PRIS_DWT, DWTModule
-from .image_embedding import WeightedImageEmbedding, ImageEmbeddingModule
-from .attack import GaussianNoiseAttack, AttackModule
-from utils import initialize_weights
+from .text_embedding import TextEmbeddingModule
+from .dwt import DWTModule
+from .image_embedding import ImageEmbeddingModule
+from .attack import AttackModule
+from training.utils import initialize_weights
 
 
 class OurModel(nn.Module):
@@ -75,7 +74,7 @@ class ResidualDenseBlock_out(nn.Module):
         x2 = self.lrelu(self.conv2(torch.cat((x, x1), 1)))
         x3 = self.lrelu(self.conv3(torch.cat((x, x1, x2), 1)))
         x4 = self.lrelu(self.conv4(torch.cat((x, x1, x2, x3), 1)))
-        x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
+        x5 = self.lrelu(self.conv5(torch.cat((x, x1, x2, x3, x4), 1)))
         return x5
 
 
@@ -188,6 +187,3 @@ class Hinet(ImageEmbeddingModule):
         x = out[:, :len, :, :]
         y = out[:, len:, :, :]
         return x, y
-
-    import torch
-    from torch import nn

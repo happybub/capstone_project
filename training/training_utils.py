@@ -3,7 +3,7 @@ import os
 import torch
 
 from modules.model import OurModel
-from utils import load_class_by_name
+from training.utils import load_class_by_name
 
 
 def construct_model_from_config(config):

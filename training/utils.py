@@ -43,7 +43,7 @@ def pop_up_image(batch_images):
     ncols = int(np.ceil(np.sqrt(batch_size)))
     nrows = int(np.ceil(batch_size / ncols))
 
-    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 2, nrows * 2))
+    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 2, nrows * 2), squeeze=False)
 
     if nrows == 1 and ncols == 1:
         ax.imshow(batch_images_npy[0])

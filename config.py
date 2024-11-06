@@ -1,5 +1,6 @@
 DATA_ROOT = './data'
 CHECKPOINTS_PATH = './checkpoints'
+LOGS_PATH = './logs'
 
 DATASET_TRAIN_FOLDER = "DIV2K_train_HR"
 DATASET_TEST_FOLDER = "DIV2K_valid_HR"
