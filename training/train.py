@@ -250,16 +250,7 @@ if __name__ == '__main__':
     time_str = time.strftime("%y%m%d_%H%M%S")
     name = time_str
 
-    # plan_name = '50_only_gen'
-    # start_epoch = 50
-    # end_epoch = 60
-    # plan_name = '30_only_gen'
-    # start_epoch = 02
-    # end_epoch = 30
-    # train('50_gen_20_dis', 0, '', 10, config_map)
     torch.manual_seed(42)
     train(name, 0, name, 50, config_map)
-    # train('from_scratch_relu_higher_gen_rate_higher_gen_freq_1', 191, 'from_scratch_relu_higher_gen_rate_higher_gen_freq_discard_dis', 200, config_map)
     # validation(name, 49, config_map)
     # validation('50_only_gen', 50, config_map)
-    # validation('before_sleep', 99, config_map)
