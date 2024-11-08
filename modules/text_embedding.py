@@ -225,6 +225,7 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         num_zeros_to_add = total_pixels - bits_repeated.size(1)
         zeros_to_add = torch.zeros(b, num_zeros_to_add, dtype=bits.dtype, device=bits.device)
         x_padded = torch.cat((bits_repeated, zeros_to_add),dim=1)
+
         x_reshaped = x_padded.view(b, 1, self.width, self.height).repeat(1, self.channels, 1, 1)
         return x_reshaped
 
@@ -239,10 +240,69 @@ class LinearTextEmbedding1(TextEmbeddingModule):
         stacked_chunks = torch.stack(chunks)
         sum_tensor = torch.sum(stacked_chunks, dim=0)
         mean_tensor = sum_tensor / k
-        # threshold = k // 2
-        # sum_tensor = (sum_tensor > threshold).float()
+    #     # threshold = k // 2
+    #     # sum_tensor = (sum_tensor > threshold).float()
 
         return mean_tensor
+
+
+
+class VitTextEmbedding(TextEmbeddingModule):
+    def __init__(self, n_bits, channels, width, height, patch_size=7, embed_dim=64):
+        super().__init__(n_bits, channels, width, height)
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+
+        # assume that width == height
+        self.img_size = width
+        self.num_patches = (self.img_size // patch_size) ** 2
+
+        self.patch_embed = nn.Conv2d(channels, self.embed_dim, kernel_size=self.patch_size,
+                                     stride=self.patch_size)
+
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
+
+        self.transformer_enc = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4),
+            num_layers=4
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(self.num_patches * embed_dim, n_bits),
+            nn.Sigmoid()
+        )
+
+        # initialize weights
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
+    def transform(self, bits):
+        b = bits.shape[0]
+        assert bits.numel() == self.n_bits * b, "The number of bits does not match the expected n_bits."
+
+        total_pixels = self.width * self.height
+        k = total_pixels // self.n_bits
+        bits_repeated = bits.repeat(1, k)
+        num_zeros_to_add = total_pixels - bits_repeated.size(1)
+        zeros_to_add = torch.zeros(b, num_zeros_to_add, dtype=bits.dtype, device=bits.device)
+        x_padded = torch.cat((bits_repeated, zeros_to_add),dim=1)
+
+        x_reshaped = x_padded.view(b, 1, self.width, self.height).repeat(1, self.channels, 1, 1)
+        return x_reshaped
+
+    def reverse(self, x):
+        # use vit to reverse
+        x = x.view(-1, self.channels, self.width, self.height)
+        x = self.patch_embed(x) # [B, E, P, P]
+        x = x.flatten(2).transpose(1, 2)  # [B, N, D]
+        x = x + self.pos_embed
+        x = self.transformer_enc(x)
+        x = self.classifier(x)
+        return x
+
+
 
 
 def fill_in(string_list, n_bits):

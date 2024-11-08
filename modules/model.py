@@ -1,13 +1,12 @@
 # define the model
-import time
 
 import torch
 from torch import nn
-from .text_embedding import RandomTextEmbedding, TextEmbeddingModule
-from .dwt import PRIS_DWT, DWTModule
-from .image_embedding import WeightedImageEmbedding, ImageEmbeddingModule
-from .attack import GaussianNoiseAttack, AttackModule
-from utils import initialize_weights
+from modules.text_embedding import TextEmbeddingModule
+from modules.dwt import DWTModule
+from modules.image_embedding import ImageEmbeddingModule
+from modules.attack import AttackModule
+from training.utils import initialize_weights
 
 
 class OurModel(nn.Module):
@@ -19,46 +18,39 @@ class OurModel(nn.Module):
         self.image_embedding = image_embedding
         self.attack = attack
 
-
-    def forward(self, text_bits, host_image, return_extracted_secret=False):
+    def forward(self, text_bits, host_image):
         device = text_bits.device
 
         freq_host_image = self.dwt(host_image)
 
         # place the model on the cpu for text_embedding
-
         secret_image = self.text_embedding(text_bits)
         secret_image = secret_image.to(device)
 
         freq_secret_image = self.dwt(secret_image)
 
-        freq_container, freq_noise = self.image_embedding(freq_host_image, freq_secret_image)
+        freq_container, discarded = self.image_embedding(freq_host_image, freq_secret_image)
 
         container_image = self.dwt(freq_container, rev=True)
 
-        if return_extracted_secret:
-            return container_image, freq_noise
-
-        return container_image
+        return container_image, secret_image, discarded
 
     def attack_image(self, container_image):
         noised_image = self.attack(container_image)
         return noised_image
 
-    def reverse(self, noised_image, extracted_secret=None):
+    def reverse(self, noised_image, sample):
         r_container = noised_image
 
         r_freq_container = self.dwt(r_container)
 
-        r_freq_noise = torch.randn_like(extracted_secret)
-
-        r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, r_freq_noise, rev=True)
+        r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, sample, rev=True)
 
         r_secret_image = self.dwt(r_freq_secret_image, rev=True)
 
         r_text_bits = self.text_embedding(r_secret_image, rev=True)
 
-        return r_text_bits, r_freq_noise
+        return r_text_bits, r_secret_image
 
 
 class ResidualDenseBlock_out(nn.Module):
@@ -69,7 +61,7 @@ class ResidualDenseBlock_out(nn.Module):
         self.conv3 = nn.Conv2d(input + 2 * 32, 32, 3, 1, 1, bias=bias)
         self.conv4 = nn.Conv2d(input + 3 * 32, 32, 3, 1, 1, bias=bias)
         self.conv5 = nn.Conv2d(input + 4 * 32, output, 3, 1, 1, bias=bias)
-        self.lrelu = nn.LeakyReLU(inplace=True)
+        self.lrelu = nn.LeakyReLU(inplace=True, negative_slope=0.1)
 
         # initialization
         initialize_weights([self.conv5], 0.)
@@ -83,8 +75,90 @@ class ResidualDenseBlock_out(nn.Module):
         return x5
 
 
+class VitBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, img_size=112, patch_size=7, embed_dim=64):
+        super(VitBlock, self).__init__()
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        self.img_size = img_size
+        self.num_patches = (img_size // patch_size) ** 2
+        self.conv = nn.Conv2d(in_channels, out_channels, 3, 1, 1)
+
+        # Define the patch embedding layer
+        self.patch_embed = nn.Conv2d(in_channels, self.embed_dim, kernel_size=self.patch_size,
+                                     stride=self.patch_size)
+
+        # Positional encoding
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
+
+        # Transformer Encoder
+        # be careful the blockout, it makes the process univertable.
+        self.transformer_enc = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4),
+            num_layers=4
+        )
+
+        # Project back to the specified output channel space
+        self.to_image = nn.ConvTranspose2d(embed_dim, out_channels, kernel_size=self.patch_size,
+                                           stride=self.patch_size)
+
+    def forward(self, x):
+        # Embed patches
+        x = self.patch_embed(x).flatten(2).transpose(1, 2)  # [B, N, D]
+        x += self.pos_embed  # Add positional encoding
+
+        x = self.transformer_enc(x)
+
+        # Reshape back to the output channel format
+        x = x.transpose(1, 2).unflatten(2, (
+        self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
+        x = self.to_image(x)
+
+        return x
+
+class ResidualVitBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, img_size=112, patch_size=7, embed_dim=256):
+        super(ResidualVitBlock, self).__init__()
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        self.img_size = img_size
+        self.num_patches = (img_size // patch_size) ** 2
+        self.conv = nn.Conv2d(in_channels, out_channels, 3, 1, 1)
+
+        # Define the patch embedding layer
+        self.patch_embed = nn.Conv2d(in_channels, self.embed_dim, kernel_size=self.patch_size,
+                                     stride=self.patch_size)
+
+        # Positional encoding
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
+
+        # Transformer Encoder
+        self.transformer_enc = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4, dropout=0),
+            num_layers=4
+        )
+
+        # Project back to the specified output channel space
+        self.to_image = nn.ConvTranspose2d(embed_dim, in_channels, kernel_size=self.patch_size,
+                                           stride=self.patch_size)
+
+    def forward(self, t):
+        x = t
+        # Embed patches
+        x = self.patch_embed(x).flatten(2).transpose(1, 2)  # [B, N, D]
+        x += self.pos_embed  # Add positional encoding
+
+        x = self.transformer_enc(x)
+
+        # Reshape back to the output channel format
+        x = x.transpose(1, 2).unflatten(2, (
+        self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
+        x = self.to_image(x)
+
+        return self.conv(x + t)
+
 class INV_block(nn.Module):
-    def __init__(self, subnet_constructor=ResidualDenseBlock_out, clamp=2.0, in_1=3, in_2=3):
+    def __init__(self, subnet_constructor=None, clamp=2.0, in_1=3, in_2=3):
         super().__init__()
 
         self.split_len1 = in_1 * 4
@@ -92,11 +166,11 @@ class INV_block(nn.Module):
 
         self.clamp = clamp
         # ρ
-        self.r = subnet_constructor(self.split_len1, self.split_len2)
+        self.r = ResidualVitBlock(self.split_len1, self.split_len2, embed_dim=64)
         # η
-        self.y = subnet_constructor(self.split_len1, self.split_len2)
+        self.y = ResidualVitBlock(self.split_len1, self.split_len2, embed_dim=64)
         # φ
-        self.f = subnet_constructor(self.split_len2, self.split_len1)
+        self.f = ResidualDenseBlock_out(self.split_len2, self.split_len1)
 
     def e(self, s):
         return torch.exp(self.clamp * 2 * (torch.sigmoid(s) - 0.5))
@@ -192,3 +266,22 @@ class Hinet(ImageEmbeddingModule):
         x = out[:, :len, :, :]
         y = out[:, len:, :, :]
         return x, y
+
+
+if __name__ == '__main__':
+    test = INV_block()
+
+    # test whether it is iverable
+    x = torch.randn(1, 24, 112, 112)
+    out = test(x)
+    print(out.shape)
+    out = test(out, rev=True)
+    print(out.shape)
+
+    # check if the x and out are the same
+    print((x - out).abs().max())
+    print(torch.allclose(x, out))
+    print(x)
+    print(out)
+
+

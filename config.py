@@ -1,5 +1,6 @@
 DATA_ROOT = './data'
 CHECKPOINTS_PATH = './checkpoints'
+LOGS_PATH = './logs'
 
 DATASET_TRAIN_FOLDER = "DIV2K_train_HR"
 DATASET_TEST_FOLDER = "DIV2K_valid_HR"
@@ -7,8 +8,9 @@ DATASET_TEST_FOLDER = "DIV2K_valid_HR"
 LOG_DIR = './logs'
 
 TRAIN_BATCH_SIZE = 4
-VAL_BATCH_SIZE = 4
+VAL_BATCH_SIZE = 2
 TEST_BATCH_SIZE = 1
+TRAIN_TEST_SPLIT = 0.8
 
 CHANNELS = 3
 IMAGE_HEIGHT = 224
@@ -22,13 +24,17 @@ SAVE_FREQ = 10
 NUM_BITS = 1024
 DEVICE = 'mps'
 
-# TEXT_EMBEDDING_MODULE = 'modules.text_embedding.LinearTextEmbedding1'
 TEXT_EMBEDDING_MODULE = 'modules.text_embedding.LinearTextEmbedding1'
+# TEXT_EMBEDDING_MODULE = 'modules.text_embedding.VitTextEmbedding'
 DWT_MODULE = 'modules.dwt.PRIS_DWT'
-# IMAGE_EMBEDDING_MODULE = 'modules.image_embedding.WeightedImageEmbedding'
 IMAGE_EMBEDDING_MODULE = 'modules.model.Hinet'
+
 ATTACK_MODULE = 'modules.attack.NoneAttack'
+LEARNING_RATE = 10 ** (-4)
 
-LEARNING_RATE = 10 ** (-4.5)
+# DISCRIMINATOR_MODULE = 'modules.discriminator.Discriminator_AvgPool'
+DISCRIMINATOR_MODULE = 'modules.discriminator.ViTDiscriminator'
+DISCRIMINATOR_LEARNING_RATE = 10 ** (-4)
+DISCRIMINATOR_INPUT_CHANNELS = 1
+
 WEIGHT_DECAY = 1e-5
-
