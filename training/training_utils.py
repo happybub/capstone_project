@@ -69,3 +69,11 @@ def save_state_to_checkpoint(model, checkpoints_path, plan_name: str, epoch):
         torch.save(module.state_dict(), path)
         print(f'Save the {name} to {epoch}.pth')
 
+
+def early_stopping(val_loss, patience=3):
+    if len(val_loss) < patience:
+        return False
+    for i in range(1, patience):
+        if val_loss[-i] < val_loss[-i - 1]:
+            return False
+    return True

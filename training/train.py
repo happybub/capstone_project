@@ -9,12 +9,12 @@ from training.utils import get_config, pop_up_image
 from dataset.dataloader import get_dataloader
 
 from training_utils import construct_discriminator_from_config, construct_model_from_config
-from training_utils import load_state_from_checkpoint, save_state_to_checkpoint
+from training_utils import load_state_from_checkpoint, save_state_to_checkpoint, early_stopping
 
 from training.logger import Logger
 
 
-def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_logger:Logger, mode='train'):
+def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_logger: Logger, mode='train'):
     net, optim, discriminator, discriminator_optim = model
     # discriminator = None
     use_dis = (discriminator is not None and discriminator_optim is not None)
@@ -108,8 +108,10 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
             if mode == 'train' and update_gen:
                 optim.step()
 
-        batches_logger.log('Batch', i).log('Size', images.size(0)).log('Mode', mode).log('Update Gen', update_gen).log('Update Dis', update_dis) \
-                    .log('Image', image_loss.item()).log('Secret', secret_loss.item()).log('Total', stego_loss.item()).log('Acc', bit_acc.item())
+        batches_logger.log('Batch', i).log('Size', images.size(0)).log('Mode', mode).log('Update Gen', update_gen).log(
+            'Update Dis', update_dis) \
+            .log('Image', image_loss.item()).log('Secret', secret_loss.item()).log('Total', stego_loss.item()).log(
+            'Acc', bit_acc.item())
         if use_dis:
             batches_logger.log('Real', real_loss.item()).log('Fake', fake_loss.item()).log('Fool', fool_loss.item())
         batches_logger.save()
@@ -117,19 +119,19 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
     epochs_logger.log('Epoch', epoch).log('Mode', mode)
     epochs_logger.log("Image", batches_logger.get_values_mean('Image')) \
-                 .log("Secret", batches_logger.get_values_mean('Secret')) \
-                 .log("Total", batches_logger.get_values_mean('Total')) \
-                 .log("Acc", batches_logger.get_values_mean('Acc'))
+        .log("Secret", batches_logger.get_values_mean('Secret')) \
+        .log("Total", batches_logger.get_values_mean('Total')) \
+        .log("Acc", batches_logger.get_values_mean('Acc'))
     if use_dis:
         epochs_logger.log("Real", batches_logger.get_values_mean('Real')) \
-                     .log("Fake", batches_logger.get_values_mean('Fake')) \
-                     .log("Fool", batches_logger.get_values_mean('Fool'))
-        epochs_logger.log("Real Acc", real_true_num / len(dataloader.dataset)).log("Fake Acc", fake_true_num / len(dataloader.dataset))
+            .log("Fake", batches_logger.get_values_mean('Fake')) \
+            .log("Fool", batches_logger.get_values_mean('Fool'))
+        epochs_logger.log("Real Acc", real_true_num / len(dataloader.dataset)).log("Fake Acc", fake_true_num / len(
+            dataloader.dataset))
 
     epochs_logger.save()
     if mode == 'val':
         print('\r', epochs_logger.format_log(compare=True))
-
 
 
 def train(based_name, start_epoch, plan_name, end_epoch, config):
@@ -161,7 +163,8 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
     duplicated_count = 0
     if os.path.exists(os.path.join(str(config['CHECKPOINTS_PATH']), plan_name)) and based_name != plan_name:
         duplicated_count += 1
-    while os.path.exists(os.path.join(str(config['CHECKPOINTS_PATH']), plan_name + f'_{duplicated_count}')) and based_name != plan_name:
+    while os.path.exists(os.path.join(str(config['CHECKPOINTS_PATH']),
+                                      plan_name + f'_{duplicated_count}')) and based_name != plan_name:
         duplicated_count += 1
     if duplicated_count > 0:
         plan_name = plan_name + f'_{duplicated_count}'
@@ -200,6 +203,11 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
 
             train_epochs_logger.save_to_file()
             val_epochs_logger.save_to_file()
+
+        val_losses = val_epochs_logger.get_values('Total')
+        if early_stopping(val_losses):
+            print('Early stopping')
+            break
 
     # save the logs in all epochs
     train_epochs_logger.save_to_file()
