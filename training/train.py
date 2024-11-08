@@ -37,19 +37,12 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
     update_gen = True
     update_dis = True
     for i, images in enumerate(dataloader):
-        # if i % 5 == 0:
-        #     update_dis = True
-        #     update_gen = False
-        # else:
-        #     update_gen = True
-        #     update_dis = False
-
         # get the host images
         images = images.to(device=device)
 
         # generate the secrets message
         batch = images.size(0)
-        secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
+        secret = torch.randint(0, 2, (batch, 1, 112, 112)).float().to(device=device)
 
         with torch.set_grad_enabled(mode == 'train'):
             if mode == 'train':
@@ -58,15 +51,13 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
                     discriminator_optim.zero_grad()
 
             # forward pass
-            container_image, secret_image, discarded = net(secret, images)
-            # discarded_secret_image = net.dwt(discarded, rev=True)
+            (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images)
+            sample = torch.rand_like(discarded).to(device=device)
 
             # the model contains the generator and discriminator
             if use_dis:
                 # train the discriminator on the fake data
-                # fake_image = container_image.detach()
                 fake_image = net.dwt(discarded.detach(), rev=True)
-                # fake_image = torch.cat((container_image, secret_image, secret_image), dim=1).detach()
                 fake_output = discriminator(fake_image)
                 fake_loss = bce_loss(fake_output, torch.zeros_like(fake_output))
 
@@ -77,9 +68,7 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
                     fake_loss.backward()
 
                 # train the discriminator on the real data
-                # original_image = images.detach()
-                original_image = net.dwt(torch.rand_like(discarded), rev=True).to(device=device)
-                # original_image = torch.cat((container_image, secret_image, torch.rand_like(secret_image)), dim=1).detach()
+                original_image = sample
                 real_output = discriminator(original_image)
                 real_loss = bce_loss(real_output, torch.ones_like(real_output))
 
@@ -92,15 +81,13 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
                     discriminator_optim.step()
 
             attacked_image = net.attack_image(container_image)
-            sample = torch.rand_like(discarded).to(device=device)
-            # sample = discarded
-            recovered_secret, recovered_secret_image = net.reverse(attacked_image, sample)
-            bit_acc = (recovered_secret.round() == secret).float().mean()
+
+            freq_attacked_container, sample, r_freq_container, r_secret_image = net.reverse(attacked_image, sample)
+            bit_acc = (r_secret_image.round() == secret).float().mean()
 
             # train the generator on the stego loss
-            image_loss = mse_loss(container_image, images)
-            # secret_loss = mse_loss(sample, discarded)
-            secret_loss = mse_loss(recovered_secret, secret) + mse_loss(fake_image, original_image)
+            image_loss = mse_loss(freq_host_image, freq_container)
+            secret_loss = mse_loss(secret, r_secret_image)
             stego_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
 
             if mode == 'train' and not use_dis:
@@ -110,8 +97,6 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
             if use_dis:
                 # train the generator on the discriminator loss
-                # fake_output = discriminator(container_image)
-                # fake_image = torch.cat((container_image, secret_image, secret_image), dim=1)
                 fake_image = net.dwt(discarded, rev=True)
                 fake_output = discriminator(fake_image)
                 fool_loss = bce_loss(fake_output, torch.ones_like(fake_output))
@@ -122,13 +107,6 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
             if mode == 'train' and update_gen:
                 optim.step()
-
-            if i == 0 and mode == 'train':
-                pop_up_image(torch.stack((images[0], container_image[0]), dim=0))
-                pop_up_image(torch.stack((secret_image[0], recovered_secret_image[0], original_image[0], fake_image[0]), dim=0))
-                # pop_up_image(discarded[0:1].view(-1, 1, 112, 112))
-                # pop_up_image(net.dwt(images[0:1]).view(4, 3, 112, 112))
-                # pop_up_image(net.dwt(container_image[0:1]).view(4, 3, 112, 112))
 
         batches_logger.log('Batch', i).log('Size', images.size(0)).log('Mode', mode).log('Update Gen', update_gen).log('Update Dis', update_dis) \
                     .log('Image', image_loss.item()).log('Secret', secret_loss.item()).log('Total', stego_loss.item()).log('Acc', bit_acc.item())
@@ -163,7 +141,7 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
     optim = torch.optim.Adam(net.parameters(), lr=float(config['LEARNING_RATE']), weight_decay=config['WEIGHT_DECAY'])
     # get the discriminator
     discriminator = construct_discriminator_from_config(config)
-    # discriminator = None
+    discriminator = None
     discriminator_optim = None
     if discriminator is not None:
         discriminator_optim = torch.optim.Adam(discriminator.parameters(),
@@ -220,6 +198,9 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
         if save_freq != -1 and (epoch - start_epoch + 1) % save_freq == 0 and epoch != start_epoch:
             save_state_to_checkpoint(model, checkpoints_path, plan_name, epoch)
 
+            train_epochs_logger.save_to_file()
+            val_epochs_logger.save_to_file()
+
     # save the logs in all epochs
     train_epochs_logger.save_to_file()
     val_epochs_logger.save_to_file()
@@ -237,26 +218,26 @@ def validation(plan_name, epoch, config):
 
     net.eval()
 
-    secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
+    secret = torch.randint(0, 2, (batch, 1, 112, 112)).float().to(device=device)
 
     dataloader = get_dataloader(config)['val']
 
     # generate the host images
     for i, images in enumerate(dataloader):
         images = images.to(device=device)
-        pop_up_image(images)
 
-        container_image, secret_image, sampled_shape = net(secret, images)
+        (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images)
+        sample = torch.rand_like(discarded).to(device=device)
         attacked_image = net.attack_image(container_image)
-        recovered_secret, recovered_secret_image, _ = net.reverse(attacked_image, sampled_shape)
+        freq_attacked_container, sample, r_freq_container, r_secret_image = net.reverse(attacked_image, sample)
 
-        pop_up_image(container_image)
-        pop_up_image(images - container_image)
-        # pop_up_image(secret_image)
-        # pop_up_image(attacked_image)
-        # pop_up_image(recovered_secret_image)
+        pop_up_image(torch.stack((images[0], container_image[0], images[0] - container_image[0]), dim=0))
+        pop_up_image(torch.cat((freq_host_image[0], secret_image[0]), dim=0).view(-1, 1, 112, 112))
+        pop_up_image(torch.cat((freq_container[0], discarded[0]), dim=0).view(-1, 1, 112, 112))
+        pop_up_image(torch.cat((freq_attacked_container[0], sample[0]), dim=0).view(-1, 1, 112, 112))
+        pop_up_image(torch.cat((r_freq_container[0], r_secret_image[0]), dim=0).view(-1, 1, 112, 112))
 
-        bit_acc = (recovered_secret.round() == secret).float().mean()
+        bit_acc = (r_secret_image.round() == secret).float().mean()
         print(f'Batch: #{i}, Bit accuracy: {bit_acc}')
         break
 
@@ -277,8 +258,8 @@ if __name__ == '__main__':
     # end_epoch = 30
     # train('50_gen_20_dis', 0, '', 10, config_map)
     torch.manual_seed(42)
-    train(name, 0, name, 200, config_map)
+    train(name, 0, name, 50, config_map)
     # train('from_scratch_relu_higher_gen_rate_higher_gen_freq_1', 191, 'from_scratch_relu_higher_gen_rate_higher_gen_freq_discard_dis', 200, config_map)
-    # validation('from_scratch_relu_higher_gen_rate_higher_gen_freq_1', 190, config_map)
+    # validation(name, 49, config_map)
     # validation('50_only_gen', 50, config_map)
     # validation('before_sleep', 99, config_map)

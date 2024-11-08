@@ -16,6 +16,7 @@ class Logger:
         self.logs = []
         self.current_log = {}
         self.path = path
+        self.saved_lines = 0
 
     def log(self, name, value):
         self.current_log[name] = value
@@ -74,12 +75,11 @@ class Logger:
             if save_path is not None:
                 plt.savefig(save_path)
 
-    def save_to_file(self, mode='a', title=None):
+    def save_to_file(self, mode='a'):
         with open(self.path, mode) as f:
-            if title is not None:
-                f.write(f'{title}\n')
-            for i in range(len(self.logs)):
+            for i in range(self.saved_lines, len(self.logs)):
                 f.write(f'{self.format_log(i)}\n')
+            self.saved_lines = len(self.logs)
 
     def load_from_file(self):
         with open(self.path, 'r') as file:

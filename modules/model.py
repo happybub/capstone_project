@@ -21,36 +21,30 @@ class OurModel(nn.Module):
     def forward(self, text_bits, host_image):
         device = text_bits.device
 
-        freq_host_image = self.dwt(host_image)
+        freq_host_image = self.dwt(host_image) # (B, 12, 112, 112)
 
-        # place the model on the cpu for text_embedding
-        secret_image = self.text_embedding(text_bits)
-        secret_image = secret_image.to(device)
+        secret_image = text_bits.view(-1, 1, 112, 112) # (B, 1, 112, 112)
 
-        freq_secret_image = self.dwt(secret_image)
+        # freq_secret_image = self.dwt(secret_image)
 
-        freq_container, discarded = self.image_embedding(freq_host_image, freq_secret_image)
+        freq_container, discarded = self.image_embedding(freq_host_image, secret_image)
 
         container_image = self.dwt(freq_container, rev=True)
 
-        return container_image, secret_image, discarded
+        return (freq_host_image, secret_image, freq_container, discarded), container_image
 
     def attack_image(self, container_image):
         noised_image = self.attack(container_image)
         return noised_image
 
     def reverse(self, noised_image, sample):
-        r_container = noised_image
+        attacked_container = noised_image
 
-        r_freq_container = self.dwt(r_container)
+        freq_attacked_container = self.dwt(attacked_container)
 
-        r_freq_host_image, r_freq_secret_image = self.image_embedding(r_freq_container, sample, rev=True)
+        r_freq_container, r_secret_image = self.image_embedding(freq_attacked_container, sample, rev=True)
 
-        r_secret_image = self.dwt(r_freq_secret_image, rev=True)
-
-        r_text_bits = self.text_embedding(r_secret_image, rev=True)
-
-        return r_text_bits, r_secret_image
+        return freq_attacked_container, sample, r_freq_container, r_secret_image
 
 
 class ResidualDenseBlock_out(nn.Module):
@@ -161,14 +155,14 @@ class INV_block(nn.Module):
     def __init__(self, subnet_constructor=None, clamp=2.0, in_1=3, in_2=3):
         super().__init__()
 
-        self.split_len1 = in_1 * 4
-        self.split_len2 = in_2 * 4
+        self.split_len1 = 12
+        self.split_len2 = 1
 
         self.clamp = clamp
         # ρ
-        self.r = ResidualVitBlock(self.split_len1, self.split_len2, embed_dim=64)
+        self.r = ResidualDenseBlock_out(self.split_len1, self.split_len2)
         # η
-        self.y = ResidualVitBlock(self.split_len1, self.split_len2, embed_dim=64)
+        self.y = ResidualDenseBlock_out(self.split_len1, self.split_len2)
         # φ
         self.f = ResidualDenseBlock_out(self.split_len2, self.split_len1)
 
@@ -262,7 +256,7 @@ class Hinet(ImageEmbeddingModule):
             out = self.inv1(out, rev=True)
 
         # split the output
-        len = out.shape[1] * self.channels // (self.channels + 1)
+        len = 12
         x = out[:, :len, :, :]
         y = out[:, len:, :, :]
         return x, y
