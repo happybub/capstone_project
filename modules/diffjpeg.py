@@ -7,7 +7,7 @@ from modules.jpeg_utils import diff_round, quality_to_factor
 
 
 class DiffJPEG(nn.Module):
-    def __init__(self, height, width, differentiable=True, quality=80):
+    def __init__(self, height, width, differentiable=True, quality=80, device='cuda'):
         ''' Initialize the DiffJPEG layer
         Inputs:
             height(int): Original image hieght
@@ -23,7 +23,7 @@ class DiffJPEG(nn.Module):
             rounding = torch.round
         factor = quality_to_factor(quality)
         self.compress = compress_jpeg(rounding=rounding, factor=factor)
-        self.decompress = decompress_jpeg(height, width, rounding=rounding, factor=factor)
+        self.decompress = decompress_jpeg(height, width, rounding=rounding, factor=factor, device=device)
 
     def forward(self, x):
         y, cb, cr = self.compress(x)
@@ -58,7 +58,9 @@ if __name__ == '__main__':
 
         tensor = torch.FloatTensor(inputs)
         print(tensor.shape)
-        jpeg = DiffJPEG(224, 224, differentiable=True)
+        device = tensor.device
+        print(device)
+        jpeg = DiffJPEG(224, 224, differentiable=True, device=device)
 
         quality = 80
         jpeg.set_quality(quality)

@@ -25,9 +25,10 @@ class rgb_to_ycbcr_jpeg(nn.Module):
         self.matrix = nn.Parameter(torch.from_numpy(matrix))
 
     def forward(self, image):
+        device = image.device
         image = image.permute(0, 2, 3, 1)
-        result = torch.tensordot(image, self.matrix, dims=1) + self.shift
-        result.view(image.shape)
+        result = torch.tensordot(image, self.matrix.to(device), dims=1) + self.shift.to(device)
+        result = result.view(image.shape).to(device)
         return result
 
 
@@ -96,9 +97,10 @@ class dct_8x8(nn.Module):
         self.scale = nn.Parameter(torch.from_numpy(np.outer(alpha, alpha) * 0.25).float())
 
     def forward(self, image):
+        device = image.device
         image = image - 128
-        result = self.scale * torch.tensordot(image, self.tensor, dims=2)
-        result.view(image.shape)
+        result = self.scale.to(device) * torch.tensordot(image, self.tensor.to(device), dims=2)
+        result = result.view(image.shape).to(device)
         return result
 
 
@@ -128,19 +130,20 @@ class compress_jpeg(nn.Module):
         self.y_table = jpeg_utils.y_table
 
     def forward(self, image):
-        y, cb, cr = self.l1(image)
+        device = image.device
+        y, cb, cr = self.l1(image.to(device))
         components = {
             'y': y,
             'cb': cb,
             'cr': cr
         }
         for k in components.keys():
-            comp = self.l2(components[k])
+            comp = self.l2(components[k].to(device))
             if k in ('cb', 'cr'):
-                comp = comp.float() / (self.c_table * self.factor)
+                comp = comp.float() / (self.c_table.to(device) * self.factor)
                 comp = self.rounding(comp)
             else:
-                comp = comp.float() / (self.y_table * self.factor)
+                comp = comp.float() / (self.y_table.to(device) * self.factor)
                 comp = self.rounding(comp)
             components[k] = comp
         return components['y'], components['cb'], components['cr']
@@ -164,9 +167,10 @@ class idct_8x8(nn.Module):
         self.tensor = nn.Parameter(torch.from_numpy(tensor).float())
 
     def forward(self, image):
-        image = image * self.alpha
-        result = 0.25 * torch.tensordot(image, self.tensor, dims=2) + 128
-        result.view(image.shape)
+        device = image.device
+        image = (image * self.alpha.to(device)).to(device)
+        result = (0.25 * torch.tensordot(image, self.tensor.to(device), dims=2) + 128).to(device)
+        result = result.view(image.shape).to(device)
         return result
 
 
@@ -236,9 +240,10 @@ class ycbcr_to_rgb_jpeg(nn.Module):
         self.matrix = nn.Parameter(torch.from_numpy(matrix))
 
     def forward(self, image):
-        result = torch.tensordot(image + self.shift, self.matrix, dims=1)
-        result.view(image.shape)
-        return result.permute(0, 3, 1, 2)
+        device = image.device
+        result = torch.tensordot((image + self.shift.to(device)).to(device), self.matrix.to(device), dims=1)
+        result = result.view(image.shape).to(device)
+        return result.permute(0, 3, 1, 2).to(device)
 
 
 class decompress_jpeg(nn.Module):
@@ -251,7 +256,7 @@ class decompress_jpeg(nn.Module):
         image(tensor): batch x 3 x height x width
     """
 
-    def __init__(self, height, width, rounding=torch.round, factor=1):
+    def __init__(self, height, width, rounding=torch.round, factor=1, device='cuda'):
         super(decompress_jpeg, self).__init__()
         self.rounding = rounding
         self.factor = factor
@@ -262,21 +267,24 @@ class decompress_jpeg(nn.Module):
         self.chroma = chroma_upsampling()
         self.colors = ycbcr_to_rgb_jpeg()
         self.height, self.width = height, width
+        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
 
     def forward(self, y, cb, cr):
-        components = {'y': y, 'cb': cb, 'cr': cr}
+        device = self.device
+        components = {'y': y.to(device), 'cb': cb.to(device), 'cr': cr.to(device)}
         for k in components.keys():
             if k in ('cb', 'cr'):
                 comp = components[k]
-                comp = comp * (self.c_table * self.factor)
+                comp = comp * (self.c_table.to(device) * self.factor)
                 height, width = int(self.height / 2), int(self.width / 2)
             else:
                 comp = components[k]
-                comp = comp * (self.y_table * self.factor)
+                comp = comp * (self.y_table.to(device) * self.factor)
                 height, width = self.height, self.width
-            comp = self.idct(comp)
-            components[k] = self.merging(comp, height, width)
-        image = self.chroma(components['y'], components['cb'], components['cr'])
-        image = self.colors(image)
-        image = torch.min(255 * torch.ones_like(image), torch.max(torch.zeros_like(image), image))
+            comp = self.idct(comp.to(device))
+            components[k] = self.merging(comp, height, width).to(device)
+        image = self.chroma(components['y'], components['cb'], components['cr']).to(device)
+        image = self.colors(image).to(device)
+        image = torch.min(255 * torch.ones_like(image, device=device),
+                          torch.max(torch.zeros_like(image, device=device), image))
         return image
