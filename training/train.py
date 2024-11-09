@@ -115,7 +115,7 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
         if use_dis:
             batches_logger.log('Real', real_loss.item()).log('Fake', fake_loss.item()).log('Fool', fool_loss.item())
         batches_logger.save()
-        print('\r', batches_logger.format_log(compare=True), end='')
+        print(batches_logger.format_log(compare=True), end='\r')
 
     epochs_logger.log('Epoch', epoch).log('Mode', mode)
     epochs_logger.log("Image", batches_logger.get_values_mean('Image')) \
@@ -131,7 +131,7 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
     epochs_logger.save()
     if mode == 'val':
-        print('\r', epochs_logger.format_log(compare=True))
+        print(epochs_logger.format_log(compare=True))
 
 
 def train(based_name, start_epoch, plan_name, end_epoch, config):
@@ -259,6 +259,7 @@ if __name__ == '__main__':
     name = time_str
 
     torch.manual_seed(42)
-    train(name, 0, name, 50, config_map)
+    # train(name, 0, name, 50, config_map)
+    validation('241108_233106', 49, config_map)
     # validation(name, 49, config_map)
     # validation('50_only_gen', 50, config_map)

@@ -86,7 +86,7 @@ class VitBlock(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
 
         # Transformer Encoder
-        # be careful the blockout, it makes the process univertable.
+        # be careful the dropout, it makes the process univertable.
         self.transformer_enc = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4),
             num_layers=4
@@ -265,7 +265,7 @@ class Hinet(ImageEmbeddingModule):
 if __name__ == '__main__':
     test = INV_block()
 
-    # test whether it is iverable
+    # test whether it is reversible
     x = torch.randn(1, 24, 112, 112)
     out = test(x)
     print(out.shape)

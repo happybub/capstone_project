@@ -71,7 +71,7 @@ def save_state_to_checkpoint(model, checkpoints_path, plan_name: str, epoch):
 
 
 def early_stopping(val_loss, patience=3):
-    if len(val_loss) < patience:
+    if len(val_loss) < patience or len(val_loss) < 10:
         return False
     for i in range(1, patience):
         if val_loss[-i] < val_loss[-i - 1]:
