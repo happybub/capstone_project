@@ -156,7 +156,7 @@ class SimpleTextEmbedding(TextEmbeddingModule):
         batch, n_bits = bits.shape
         if n_bits != self.n_bits:
             raise ValueError("The length of input bits does not match the pre-set.")
-        secret_image_flatten = torch.randint(0, 1, (batch, self.channels, self.width, self.height)).view(batch, -1).to(device=bits.device)
+        secret_image_flatten = torch.zeros((batch, self.channels, self.width, self.height)).view(batch, -1).to(device=bits.device)
         secret_image_flatten[:, :self.n_bits] = bits
         secret_image_flatten = secret_image_flatten.view(batch, self.channels, self.width, self.height)
 
@@ -168,6 +168,30 @@ class SimpleTextEmbedding(TextEmbeddingModule):
         r_secret = r_secret_image_flatten[:, :self.n_bits]
         r_secret = r_secret.view(batch, self.n_bits)
         return r_secret
+
+class MiddleQuarterSquareTextEmbedding(TextEmbeddingModule):
+    def __init__(self, n_bits, channels, width, height):
+        super().__init__(n_bits, channels, width, height)
+        self.start_h = height // 4
+        self.end_h = self.start_h + height // 2
+        self.start_w = width // 4
+        self.end_w = self.start_w + width // 2
+
+
+
+    def transform(self, bits, random=False):
+        batch = bits.size(0)
+        secret_image = torch.zeros((batch, self.channels, self.height, self.width)).to(device=bits.device)
+
+        secret_image[:, :, self.start_h:self.end_h, self.start_w:self.end_w] = bits.view(batch, self.channels, self.height // 2, self.width // 2)
+
+        return secret_image
+
+    def reverse(self, x):
+        bits = x[:, :, self.start_h:self.end_h, self.start_w:self.end_w]
+        return bits.reshape(bits.size(0), self.n_bits)
+
+
 
 class RandomTextEmbedding(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):

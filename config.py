@@ -23,10 +23,11 @@ LAMBDA_SECRET_LOSS = 0.5
 
 SAVE_FREQ = 10
 
-NUM_BITS = 1024
+NUM_BITS = 56 * 56
 DEVICE = 'mps'
 
-TEXT_EMBEDDING_MODULE = 'modules.text_embedding.SimpleTextEmbedding'
+# TEXT_EMBEDDING_MODULE = 'modules.text_embedding.SimpleTextEmbedding'
+TEXT_EMBEDDING_MODULE = 'modules.text_embedding.MiddleQuarterSquareTextEmbedding'
 TEXT_EMBEDDING_CHANNEL = 1
 # TEXT_EMBEDDING_MODULE = 'modules.text_embedding.VitTextEmbedding'
 DWT_MODULE = 'modules.dwt.PRIS_DWT'
@@ -34,8 +35,8 @@ IMAGE_EMBEDDING_MODULE = 'modules.model.Hinet'
 
 # ATTACK_MODULE = 'modules.attack.NoneAttack'
 # ATTACK_MODULE = 'modules.attack.JPEGCompressionPRISAttack'
-# ATTACK_MODULE = 'modules.attack.OcclusionAttack'
-ATTACK_MODULE = 'modules.attack.OrderOcclusionAttack'
+ATTACK_MODULE = 'modules.attack.OcclusionAttack'
+# ATTACK_MODULE = 'modules.attack.OrderOcclusionAttack'
 LEARNING_RATE = 10 ** (-4)
 
 # DISCRIMINATOR_MODULE = 'modules.discriminator.Discriminator_AvgPool'

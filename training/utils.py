@@ -111,6 +111,19 @@ def pop_up_image(images, display_size=(112, 112)):
 
     plt.show()
 
+def pop_up_attention_map(attention_weights):
+    if isinstance(attention_weights, torch.Tensor):
+        attention_weights = attention_weights.detach().cpu().numpy()
+
+    # Use matplotlib to create a heatmap of the attention weights
+    plt.figure(figsize=(10, 8))
+    plt.imshow(attention_weights, cmap='viridis', interpolation='nearest')
+    plt.colorbar()
+    plt.xlabel('Keys')
+    plt.ylabel('Queries')
+    plt.title('Attention Map')
+    plt.show()
+
 mse_loss = torch.nn.MSELoss(reduce=True)
 bce_loss = nn.BCEWithLogitsLoss(reduce=True)
 

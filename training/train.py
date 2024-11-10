@@ -3,7 +3,6 @@ import platform
 import time
 
 import torch
-from torch import nn
 
 from training.utils import mse_loss, bce_loss
 from training.utils import get_config, pop_up_image
@@ -213,9 +212,9 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
             val_epochs_logger.save_to_file()
 
         val_losses = val_epochs_logger.get_values('Total')
-        if early_stopping(val_losses):
-            print('Early stopping')
-            break
+        # if early_stopping(val_losses):
+        #     print('Early stopping')
+        #     break
 
     # save the logs in all epochs
     train_epochs_logger.save_to_file()
@@ -248,7 +247,8 @@ def validation(plan_name, epoch, config):
 
         (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images)
         sample = torch.rand_like(discarded).to(device=device)
-        attacked_image = net.attack_image(container_image).to(device=device)
+        net.attack.x_offset = net.attack.y_offset = 56
+        attacked_image = net.attack(container_image, random=False).to(device=device)
         (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
 
 
@@ -268,14 +268,11 @@ if __name__ == '__main__':
     # get the time in format yyyymmdd:HHMMSS
     time_str = time.strftime("%y%m%d_%H%M%S")
     name = time_str
-    # name = '241110_034434'
-    # name = '241110_043441'
-    # name = '241110_045700'
-    # name = '241110_051055'
-    # name = '241110_055243'
-    # name = '241110_115719'
+
+    # name = '241110_161636' # 有效 # embed=128
     torch.manual_seed(42)
-    train(name, 1, name, 20, config_map)
-    validation(name, 10, config_map)
-    # validation(name, 49, config_map)
+    train(name, 1, name, 200, config_map)
+
+    # validation(name, 200, config_map)
+    # validation(name, 30, config_map)
     # validation('50_only_gen', 50, config_map)

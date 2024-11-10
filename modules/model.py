@@ -23,17 +23,12 @@ class OurModel(nn.Module):
 
         freq_host_image = self.dwt(host_image)
 
-        # key = self.dwt(self.attack(host_image))
-        key = torch.ones_like(host_image)
-        key = key.view(host_image.size(0), host_image.size(1), 224 * 224)
-        key[:, :, :5000] = 0
-        key = key.view(*host_image.shape)
-        key = self.dwt(key)
+        simulated_attack = self.attack(host_image, random=True).to(device=device)
 
         secret_image = self.text_embedding(text_bits)
 
         # freq_secret_image = self.dwt(secret_image)
-        freq_container, discarded = self.image_embedding(key, freq_host_image, secret_image)
+        freq_container, discarded = self.image_embedding(self.dwt(simulated_attack), freq_host_image, secret_image)
 
         container_image = self.dwt(freq_container, rev=True)
 
@@ -44,17 +39,11 @@ class OurModel(nn.Module):
         return noised_image
 
     def reverse(self, noised_image, sample):
-        key = torch.ones_like(noised_image)
-        key = key.view(noised_image.size(0), noised_image.size(1), 224 * 224)
-        key[:, :, :5000] = 0
-        key = key.view(*noised_image.shape)
-        key = self.dwt(key)
-
         attacked_container = noised_image
 
         freq_attacked_container = self.dwt(attacked_container)
 
-        r_freq_container, r_secret_image = self.image_embedding(key, freq_attacked_container, sample, rev=True)
+        r_freq_container, r_secret_image = self.image_embedding(freq_attacked_container, freq_attacked_container, sample, rev=True)
 
         r_secret = self.text_embedding(r_secret_image, rev=True)
 
@@ -169,7 +158,7 @@ class ResidualVitBlock(nn.Module):
 
 
 class ResidualVitBlockQKV(nn.Module):
-    def __init__(self, q_channels, k_channels, v_channels, out_channels, img_size=112, patch_size=7, embed_dim=64, num_heads=1):
+    def __init__(self, q_channels, k_channels, v_channels, out_channels=1, img_size=112, patch_size=7, embed_dim=128, num_heads=1):
         super(ResidualVitBlockQKV, self).__init__()
         self.patch_size = patch_size
         self.embed_dim = embed_dim
@@ -189,17 +178,21 @@ class ResidualVitBlockQKV(nn.Module):
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
 
-        self.multihead_attention = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=num_heads)
+        self.multihead_attention = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=num_heads, batch_first=True)
 
         self.to_image = nn.ConvTranspose2d(embed_dim, self.q_channels, kernel_size=self.patch_size,
                                            stride=self.patch_size)
 
         self.conv = nn.Conv2d(q_channels, out_channels, 3, 1, 1)
 
+        torch.nn.init.xavier_normal_(self.patch_embed_q.weight)
+        torch.nn.init.xavier_normal_(self.patch_embed_k.weight)
+        torch.nn.init.xavier_normal_(self.patch_embed_v.weight)
+
     def forward(self, query, key, value):
-        q = self.patch_embed_q(query).flatten(2).transpose(1, 2)  # [B, N, D_q]
-        k = self.patch_embed_k(key).flatten(2).transpose(1, 2)    # [B, N, D]
-        v = self.patch_embed_v(value).flatten(2).transpose(1, 2)  # [B, N, D]
+        q = self.patch_embed_q(query).flatten(2).transpose(1, 2)  # [B, N_q, D_q]
+        k = self.patch_embed_k(key).flatten(2).transpose(1, 2)    # [B, N_k, D]
+        v = self.patch_embed_v(value).flatten(2).transpose(1, 2)  # [B, N_v, D]
 
         q += self.pos_embed
         k += self.pos_embed
@@ -211,17 +204,8 @@ class ResidualVitBlockQKV(nn.Module):
         attn_output = attn_output.transpose(1, 2).unflatten(2, (self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
         attn_output = self.to_image(attn_output)
 
-        return self.conv(attn_output + query)
-        # B, C, W, H = query.size()
-        # split_size = H // 8
-        #
-        # top_part = query[:, :, :split_size, :]
-        # bottom_part = query[:, :, split_size:, :]
-        #
-        # shifted_tensor = torch.cat((bottom_part, top_part), dim=2)
-        #
-        # return shifted_tensor.expand(-1, 12, -1, -1)
 
+        return self.conv(attn_output + query)
 
 class INV_block(nn.Module):
     def __init__(self, clamp=2.0, channels_x=12, channels_y=1):
@@ -235,6 +219,7 @@ class INV_block(nn.Module):
         self.r = ResidualDenseBlock_out(self.channels_x, self.channels_y)
         # η
         self.y = ResidualVitBlockQKV(self.channels_x, self.channels_x, self.channels_x, self.channels_y)
+        # self.y = ResidualDenseBlock_out(self.channels_x, self.channels_y)
         # φ
         self.f = ResidualDenseBlock_out(self.channels_y, self.channels_x)
 
@@ -249,11 +234,13 @@ class INV_block(nn.Module):
             t2 = self.f(x2)
             y1 = x1 + t2
             s1, t1 = self.r(y1), self.y(y1, x0, x0)
+            # s1, t1 = self.r(y1), self.y(y1)
             y2 = self.e(s1) * x2 + t1
 
         else:
 
             s1, t1 = self.r(x1), self.y(x1, x0, x0)
+            # s1, t1 = self.r(x1), self.y(x1)
             y2 = (x2 - t1) / self.e(s1)
             t2 = self.f(y2)
             y1 = (x1 - t2)

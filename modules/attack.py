@@ -225,22 +225,26 @@ class OcclusionAttack(AttackModule):
     """
     Simulate occlusion attack by occluding a part of the image with a black rectangle.
     """
-    def __init__(self, width=224, height=224):
+    def __init__(self, width=112, height=112):
         super().__init__()
         self.width = width
         self.height = height
+        self.x_offset = 0
+        self.y_offset = 0
 
-    def forward(self, image):
+    def forward(self, image, random=False):
         n, c, h, w = image.shape
         occluded_image = image.clone()
-        height = np.random.randint(self.height // 2, self.height)
-        width = np.random.randint(self.width // 2, self.width)
-        # height = self.height
-        # width = self.width
+        # height = np.random.randint(self.height // 2, self.height)
+        # width = np.random.randint(self.width // 2, self.width)
+        height = self.height
+        width = self.width
         # randomly select the position of the occlusion
-        x_offset = np.random.randint(0, w - self.width + 1)
-        y_offset = np.random.randint(0, h - self.height + 1)
-        occluded_image[:, :, y_offset:y_offset + height, x_offset:x_offset + width] = 0
+        if random:
+            self.x_offset = np.random.randint(0, w - self.width + 1)
+            self.y_offset = np.random.randint(0, h - self.height + 1)
+
+        occluded_image[:, :, self.y_offset:self.y_offset + height, self.x_offset:self.x_offset + width] = 0
         return occluded_image
 
 class OrderOcclusionAttack(AttackModule):
