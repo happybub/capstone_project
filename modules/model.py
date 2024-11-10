@@ -251,7 +251,7 @@ class INV_block(nn.Module):
 class Hinet(ImageEmbeddingModule):
     def __init__(self, channels_x, channels_y, width, height):
         super(Hinet, self).__init__(channels_x=channels_x, channels_y=channels_y, width=width, height=height)
-        self.inv_blocks = nn.ModuleList([INV_block(channels_x=self.channels_x, channels_y=self.channels_y) for _ in range(16)])
+        self.inv_blocks = nn.ModuleList([INV_block(channels_x=self.channels_x, channels_y=self.channels_y) for _ in range(8)])
         self.pop_up_process = False
 
     def forward(self, key, x, y, rev=False):
@@ -260,14 +260,14 @@ class Hinet(ImageEmbeddingModule):
         x = torch.cat([x, y], dim=1)
         if not rev:
             out = x
-            for i in range(16):
+            for i in range(8):
                 if self.pop_up_process:
                     images.append(out[0].detach().cpu())
                 out = self.inv_blocks[i](key, out)
 
         else:
             out = x
-            for i in reversed(range(16)):
+            for i in reversed(range(8)):
                 if self.pop_up_process:
                     images.append(out[0].detach().cpu())
                 out = self.inv_blocks[i](key, out, rev=True)
