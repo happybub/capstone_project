@@ -97,7 +97,8 @@ class Logger:
 
 
 if __name__ == '__main__':
-    logger = Logger('../logs/241108_044439/val_logs.log')
+    logger = Logger('../logs/241110_161636/val_logs.log')
     logger.load_from_file()
-    logger.line_graph(["Real Acc", "Fake Acc"])
+    logger.line_graph(["Secret", "Image"])
     logger.line_graph(["Acc"])
+

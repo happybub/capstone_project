@@ -158,7 +158,7 @@ class ResidualVitBlock(nn.Module):
 
 
 class ResidualVitBlockQKV(nn.Module):
-    def __init__(self, q_channels, k_channels, v_channels, out_channels=1, img_size=112, patch_size=7, embed_dim=128, num_heads=1):
+    def __init__(self, q_channels, k_channels, v_channels, out_channels=1, img_size=112, patch_size=7, embed_dim=64, num_heads=1):
         super(ResidualVitBlockQKV, self).__init__()
         self.patch_size = patch_size
         self.embed_dim = embed_dim

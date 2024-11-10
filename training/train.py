@@ -273,6 +273,6 @@ if __name__ == '__main__':
     torch.manual_seed(42)
     train(name, 1, name, 200, config_map)
 
-    # validation(name, 200, config_map)
+    validation(name, 200, config_map)
     # validation(name, 30, config_map)
     # validation('50_only_gen', 50, config_map)
