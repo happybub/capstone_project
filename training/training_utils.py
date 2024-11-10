@@ -2,7 +2,7 @@ import os
 
 import torch
 
-from modules.model import OurModel
+from modules.model import Stego
 from training.utils import load_class_by_name
 
 
@@ -25,7 +25,7 @@ def construct_model_from_config(config):
     attack_module = load_class_by_name(config['ATTACK_MODULE'])()
 
     # construct the model
-    net = OurModel(text_embedding_module, dwt, image_embedding_module, attack_module)
+    net = Stego(text_embedding_module, dwt, image_embedding_module, attack_module)
 
     return net
 

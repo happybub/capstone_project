@@ -97,8 +97,47 @@ class Logger:
 
 
 if __name__ == '__main__':
-    logger = Logger('../logs/241110_161636/val_logs.log')
-    logger.load_from_file()
-    logger.line_graph(["Secret", "Image"])
-    logger.line_graph(["Acc"])
+    logger1 = Logger('../logs/241110_161636/val_logs.log')
+    # logger2 = Logger('../logs/241110_210355/val_logs.log')
+    logger2 = Logger('../logs/241111_041840/train_logs.log')
+    logger3 = Logger('../logs/vit/train_logs.log')
+    logger1.load_from_file()
+    logger2.load_from_file()
+    logger3.load_from_file()
+
+    Secret_16_blocks = logger1.get_values('Secret')
+    Image_16_blocks = logger1.get_values('Image')
+    Acc_16_blocks = logger1.get_values('Acc')
+
+    Secret_6_blocks = logger2.get_values('Secret')
+    Image_6_blocks = logger2.get_values('Image')
+    Acc_6_blocks = logger2.get_values('Acc')
+
+    Secret_4_Attn_blocks = logger3.get_values('Secret')
+    Image_4_Attn_blocks = logger3.get_values('Image')
+    Acc_4_Attn_blocks = logger3.get_values('Acc')
+
+
+
+
+    # plot
+    plt.plot(Secret_16_blocks, label='Secret_16_blocks')
+    # plt.plot(Image_16_blocks, label='Image_16_blocks')
+    plt.plot(Secret_6_blocks, label='Secret_6_blocks')
+    # plt.plot(Image_6_blocks, label='Image_6_blocks')
+    plt.plot(Secret_4_Attn_blocks, label='Secret_4_Attn_blocks')
+    # plt.plot(Image_4_Attn_blocks, label='Image_4_Attn_blocks')
+    plt.ylabel('Secret')
+    plt.legend()
+    plt.show()
+
+    plt.plot(Acc_16_blocks, label='Acc_16_blocks')
+    plt.plot(Acc_6_blocks, label='Acc_6_blocks')
+    plt.plot(Acc_4_Attn_blocks, label='Acc_4_Attn_blocks')
+    plt.ylabel('Acc')
+    plt.legend()
+    plt.show()
+
+    #logger1.line_graph(["Secret", "Image"])
+    #logger.line_graph(["Acc"])
 

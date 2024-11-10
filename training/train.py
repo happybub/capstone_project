@@ -248,7 +248,7 @@ def validation(plan_name, epoch, config):
         (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images)
         sample = torch.rand_like(discarded).to(device=device)
         net.attack.x_offset = net.attack.y_offset = 56
-        attacked_image = net.attack(container_image, random=False).to(device=device)
+        attacked_image = net.attack(container_image).to(device=device)
         (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
 
 
@@ -268,11 +268,18 @@ if __name__ == '__main__':
     # get the time in format yyyymmdd:HHMMSS
     time_str = time.strftime("%y%m%d_%H%M%S")
     name = time_str
+    print(name)
+
+    # name = '241110_210355' # 减少embed为64
 
     # name = '241110_161636' # 有效 # embed=128
+
+    # name = '241110_234551'
+
+    # name = 'vit'
     torch.manual_seed(42)
     train(name, 1, name, 200, config_map)
 
-    validation(name, 200, config_map)
+    # validation(name, 140, config_map)
     # validation(name, 30, config_map)
     # validation('50_only_gen', 50, config_map)
