@@ -13,22 +13,24 @@ class ImageEmbeddingModule(nn.Module):
     Output: 2 4D tensors with shape (batch_size, channels, height, width)
     """
 
-    def __init__(self, channels, width, height):
+    def __init__(self, channels_x, channels_y, width, height):
         super().__init__()
-        self.channels = channels
+        self.channels_x = channels_x
+        self.channels_y = channels_y
         self.width = width
         self.height = height
 
-    def forward(self, image1, image2, rev=False):
+    def forward(self, x0, image1, image2, rev=False):
         raise NotImplementedError("This method should be implemented by subclasses.")
 
 
 # A example implementation of the ImageEmbeddingModule
 class WeightedImageEmbedding(ImageEmbeddingModule):
 
-    def __init__(self, channels, width, height):
-        super().__init__(channels, width, height)
-        # self.weights = nn.Parameter(torch.Tensor(2))
+    def __init__(self, channels_x, channels_y, width, height):
+        super().__init__(channels_x, channels_y, width, height)
+        self.channels_x = channels_x
+        self.channels_y = channels_y
         self.weights = torch.tensor([0.9, 0.1])
 
     def forward(self, image1, image2, rev=False):

@@ -7,17 +7,21 @@ from training.utils import load_class_by_name
 
 
 def construct_model_from_config(config):
-    channels, image_height, image_width = int(config['CHANNELS']), int(config['IMAGE_HEIGHT']), int(
-        config['IMAGE_WIDTH'])
-    num_bits = config['NUM_BITS']
-
     # construct the modules
-    text_embedding_module = load_class_by_name(config['TEXT_EMBEDDING_MODULE'])(num_bits, channels=1,
-                                                                                    width=image_width,
-                                                                                    height=image_height)
+    text_embedding_module = load_class_by_name(config['TEXT_EMBEDDING_MODULE'])(
+        n_bits=config['NUM_BITS'],
+        channels=config['TEXT_EMBEDDING_CHANNEL'],
+        width=int(config['EMBEDDED_IMAGE_WEIGHT']),
+        height=int(config['EMBEDDED_IMAGE_HEIGHT']))
+
     dwt = load_class_by_name(config['DWT_MODULE'])()
-    image_embedding_module = load_class_by_name(config['IMAGE_EMBEDDING_MODULE'])(channels, image_height,
-                                                                                      image_width)
+
+    image_embedding_module = load_class_by_name(config['IMAGE_EMBEDDING_MODULE'])(
+        channels_x=int(config['CHANNELS']) * 4,
+        channels_y=config['TEXT_EMBEDDING_CHANNEL'],
+        width=int(config['EMBEDDED_IMAGE_WEIGHT']),
+        height=int(config['EMBEDDED_IMAGE_HEIGHT']))
+
     attack_module = load_class_by_name(config['ATTACK_MODULE'])()
 
     # construct the model
@@ -27,7 +31,8 @@ def construct_model_from_config(config):
 
 
 def construct_discriminator_from_config(config):
-    discriminator = load_class_by_name(config['DISCRIMINATOR_MODULE'])(input_channels=int(config['DISCRIMINATOR_INPUT_CHANNELS']))
+    discriminator = load_class_by_name(config['DISCRIMINATOR_MODULE'])(
+        input_channels=int(config['DISCRIMINATOR_INPUT_CHANNELS']))
     return discriminator
 
 

@@ -221,6 +221,44 @@ class JPEGCompressionPRISAttack(AttackModule):
 
         return outputs / 255.
 
+class OcclusionAttack(AttackModule):
+    """
+    Simulate occlusion attack by occluding a part of the image with a black rectangle.
+    """
+    def __init__(self, width=224, height=224):
+        super().__init__()
+        self.width = width
+        self.height = height
+
+    def forward(self, image):
+        n, c, h, w = image.shape
+        occluded_image = image.clone()
+        height = np.random.randint(self.height // 2, self.height)
+        width = np.random.randint(self.width // 2, self.width)
+        # height = self.height
+        # width = self.width
+        # randomly select the position of the occlusion
+        x_offset = np.random.randint(0, w - self.width + 1)
+        y_offset = np.random.randint(0, h - self.height + 1)
+        occluded_image[:, :, y_offset:y_offset + height, x_offset:x_offset + width] = 0
+        return occluded_image
+
+class OrderOcclusionAttack(AttackModule):
+    """
+    Simulate occlusion attack that always occluding the first n-th bits of an image
+    """
+    def __init__(self, n=5000):
+        super().__init__()
+        self.n = n
+
+    def forward(self, image):
+        n, c, h, w = image.shape
+        occluded_image = image.clone()
+        occluded_image = occluded_image.view(n, c, h * w)
+        occluded_image[:, :, :self.n] = 0
+        occluded_image = occluded_image.view(n, c, h, w)
+        return occluded_image
+
 class MultiAttack(AttackModule):
     """
     Randomly apply different attacks to the input image based on given probabilities.

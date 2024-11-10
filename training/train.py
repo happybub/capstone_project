@@ -1,4 +1,5 @@
 import os
+import platform
 import time
 
 import torch
@@ -42,7 +43,7 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
         # generate the secrets message
         batch = images.size(0)
-        secret = torch.randint(0, 2, (batch, 1, 112, 112)).float().to(device=device)
+        secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
 
         with torch.set_grad_enabled(mode == 'train'):
             if mode == 'train':
@@ -80,14 +81,14 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
                 if mode == 'train' and update_dis:
                     discriminator_optim.step()
 
-            attacked_image = net.attack_image(container_image)
+            attacked_image = net.attack_image(container_image).to(device=device)
 
-            freq_attacked_container, sample, r_freq_container, r_secret_image = net.reverse(attacked_image, sample)
-            bit_acc = (r_secret_image.round() == secret).float().mean()
+            (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
+            bit_acc = (r_secret.round() == secret).float().mean()
 
             # train the generator on the stego loss
             image_loss = mse_loss(freq_host_image, freq_container)
-            secret_loss = mse_loss(secret, r_secret_image)
+            secret_loss = mse_loss(r_secret, secret)
             stego_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
 
             if mode == 'train' and not use_dis:
@@ -115,7 +116,10 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
         if use_dis:
             batches_logger.log('Real', real_loss.item()).log('Fake', fake_loss.item()).log('Fool', fool_loss.item())
         batches_logger.save()
-        print(batches_logger.format_log(compare=True), end='\r')
+        if platform.system() == 'Linux':
+            print(batches_logger.format_log(compare=True), end='\r')
+        else:
+            print('\r', batches_logger.format_log(compare=True), end='')
 
     epochs_logger.log('Epoch', epoch).log('Mode', mode)
     epochs_logger.log("Image", batches_logger.get_values_mean('Image')) \
@@ -131,7 +135,10 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
     epochs_logger.save()
     if mode == 'val':
-        print(epochs_logger.format_log(compare=True))
+        if platform.system() == 'Linux':
+            print(epochs_logger.format_log(compare=True))
+        else:
+            print('\r', epochs_logger.format_log(compare=True))
 
 
 def train(based_name, start_epoch, plan_name, end_epoch, config):
@@ -192,6 +199,7 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
 
         # validate the model
         # print("Validating epoch: ", epoch)
+        # net.image_embedding.pop_up_process = True
         val_batches_logger = Logger(os.path.join(logs_path, plan_name, f'val_epoch_{epoch}.log'))
         train_epoch(model, dataloader_map, config, epoch, val_epochs_logger, val_batches_logger, mode='val')
 
@@ -226,26 +234,29 @@ def validation(plan_name, epoch, config):
 
     net.eval()
 
-    secret = torch.randint(0, 2, (batch, 1, 112, 112)).float().to(device=device)
+    net.image_embedding.pop_up_process = True
+
+    secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
 
     dataloader = get_dataloader(config)['val']
 
     # generate the host images
     for i, images in enumerate(dataloader):
+        net.image_embedding.pop_up_process = True
+
         images = images.to(device=device)
 
         (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images)
         sample = torch.rand_like(discarded).to(device=device)
-        attacked_image = net.attack_image(container_image)
-        freq_attacked_container, sample, r_freq_container, r_secret_image = net.reverse(attacked_image, sample)
+        attacked_image = net.attack_image(container_image).to(device=device)
+        (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
 
-        pop_up_image(torch.stack((images[0], container_image[0], images[0] - container_image[0]), dim=0))
-        pop_up_image(torch.cat((freq_host_image[0], secret_image[0]), dim=0).view(-1, 1, 112, 112))
-        pop_up_image(torch.cat((freq_container[0], discarded[0]), dim=0).view(-1, 1, 112, 112))
-        pop_up_image(torch.cat((freq_attacked_container[0], sample[0]), dim=0).view(-1, 1, 112, 112))
-        pop_up_image(torch.cat((r_freq_container[0], r_secret_image[0]), dim=0).view(-1, 1, 112, 112))
 
-        bit_acc = (r_secret_image.round() == secret).float().mean()
+        # pop_up_image([images[0], container_image[0]])
+        pop_up_image([container_image[0], attacked_image[0], container_image[0] - attacked_image[0]])
+        print(torch.allclose(container_image, attacked_image, atol=1e-6))
+        print(container_image[0].mean(), attacked_image[0].mean(), (container_image[0] - attacked_image[0]).mean())
+        bit_acc = (r_secret.round() == secret).float().mean()
         print(f'Batch: #{i}, Bit accuracy: {bit_acc}')
         break
 
@@ -257,9 +268,14 @@ if __name__ == '__main__':
     # get the time in format yyyymmdd:HHMMSS
     time_str = time.strftime("%y%m%d_%H%M%S")
     name = time_str
-
+    # name = '241110_034434'
+    # name = '241110_043441'
+    # name = '241110_045700'
+    # name = '241110_051055'
+    # name = '241110_055243'
+    # name = '241110_115719'
     torch.manual_seed(42)
-    # train(name, 0, name, 50, config_map)
-    validation('241108_233106', 49, config_map)
+    train(name, 1, name, 20, config_map)
+    validation(name, 10, config_map)
     # validation(name, 49, config_map)
     # validation('50_only_gen', 50, config_map)

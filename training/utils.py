@@ -24,41 +24,92 @@ def get_config(parser=None):
     return config_map
 
 
-def pop_up_image(batch_images):
+def pop_up_image(images, display_size=(112, 112)):
     """
-    Input shape: (batch_size, 3, height, width)
+    Display images where inputs can be:
+    - A single tensor
+    - A list of tensors
+    - A list of lists, each containing tensors
+
+    Args:
+        images: single tensor, list of tensors, or list of lists of tensors
+        display_size (tuple): the target display size (height, width) for each image.
     """
 
-    batch_images = batch_images.permute(0, 2, 3, 1)
-    batch_images_npy = batch_images.detach().cpu().numpy()
+    def process_image(image):
+        image = image.detach().cpu()
+        """Process and normalize a single image tensor."""
+        if image.ndim == 2:  # H, W -> add channel dimension
+            image = image.unsqueeze(0)  # C=1
+            ori_size = image.shape
+            image = torch.nn.functional.interpolate(image, size=display_size, mode='bilinear', align_corners=False)
+            images = [(image, ori_size)]
+        elif image.ndim == 3:  # C, H, W
+            ori_size = image.shape
+            image = torch.nn.functional.interpolate(image.unsqueeze(0), size=display_size, mode='bilinear',
+                                                    align_corners=False).squeeze(0)
+            images = [(image, ori_size)]
+        elif image.ndim == 4:  # B, C, H, W
+            ori_size = image.shape[1:]
+            image = torch.nn.functional.interpolate(image, size=display_size, mode='bilinear', align_corners=False)
+            images = [(image[i], ori_size) for i in range(image.shape[0])]
+        else:
+            raise ValueError(f"Invalid image shape: {image.shape}")
 
-    batch_images_npy = (batch_images_npy - batch_images_npy.min(axis=(1, 2, 3), keepdims=True)) / \
-                       (batch_images_npy.max(axis=(1, 2, 3), keepdims=True) - batch_images_npy.min(axis=(1, 2, 3),
-                                                                                                   keepdims=True))
+        # image = (image * 255).byte()
+        return [((image - image.min()) / (image.max() - image.min()), ori_size) for image, ori_size in images]
 
-    batch_images_npy = np.round(batch_images_npy * 255).astype(np.uint8)
+    def flatten_and_process(images):
+        """Flatten and process images to ensure they are a list of lists of tensors."""
+        if isinstance(images, torch.Tensor):
+            images = [images]
 
-    batch_size, height, width, _ = batch_images_npy.shape
+        ret = []
+        if isinstance(images, list) and all(isinstance(item, torch.Tensor) for item in images):
+            processed = []
+            for item in images:
+                processed.extend(process_image(item))
+            ret.append(processed)
+            return ret
 
-    ncols = int(np.ceil(np.sqrt(batch_size)))
-    nrows = int(np.ceil(batch_size / ncols))
+        if isinstance(images, list) and all(isinstance(item, list) for item in images):
+            for row in images:
+                processed = []
+                for item in row:
+                    processed.extend(process_image(item))
+                ret.append(processed)
+            return ret
 
-    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 2, nrows * 2), squeeze=False)
+        raise ValueError(f"Invalid input type: {type(images)}")
 
-    if nrows == 1 and ncols == 1:
-        ax.imshow(batch_images_npy[0])
-    else:
-        for i in range(nrows):
-            for j in range(ncols):
-                idx = i * ncols + j
-                if idx < batch_size:
-                    ax[i, j].imshow(batch_images_npy[idx])
-                    ax[i, j].axis('off')
-                else:
-                    ax[i, j].axis('off')
+    processed_images = flatten_and_process(images)
+
+    # Determine number of rows and columns
+    nrows = len(processed_images)
+    ncols = max(len(item) for item in processed_images)
+
+    # Create subplots and display images
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 3, nrows * 3), squeeze=False)
+
+    for i, row in enumerate(processed_images):
+        for j, (image, ori_size) in enumerate(row):
+            # Assuming image is a tensor of shape (C, H, W)
+            if image.shape[0] == 1:
+                # axes[i, j].imshow(image[0].numpy(), cmap='gray')
+                axes[i, j].imshow(image[0].numpy())
+            else:  # RGB image
+                axes[i, j].imshow(image.permute(1, 2, 0).numpy())
+
+            axes[i, j].axis('off')
+
+            # Display the shape of the tensor above the image
+            label = f'Size: {ori_size[0]}x{ori_size[1]}x{ori_size[2]}' if len(ori_size) == 3 else f'Size: {ori_size[0]}x{ori_size[1]}'
+
+            # Place the text above the image, centered horizontally
+            axes[i, j].text(0.5, 1.05, label, color='black', fontsize=12, ha='center',
+                            va='bottom', transform=axes[i, j].transAxes)
 
     plt.show()
-
 
 mse_loss = torch.nn.MSELoss(reduce=True)
 bce_loss = nn.BCEWithLogitsLoss(reduce=True)

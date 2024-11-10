@@ -6,7 +6,7 @@ from modules.text_embedding import TextEmbeddingModule
 from modules.dwt import DWTModule
 from modules.image_embedding import ImageEmbeddingModule
 from modules.attack import AttackModule
-from training.utils import initialize_weights
+from training.utils import initialize_weights, pop_up_image
 
 
 class OurModel(nn.Module):
@@ -21,13 +21,19 @@ class OurModel(nn.Module):
     def forward(self, text_bits, host_image):
         device = text_bits.device
 
-        freq_host_image = self.dwt(host_image) # (B, 12, 112, 112)
+        freq_host_image = self.dwt(host_image)
 
-        secret_image = text_bits.view(-1, 1, 112, 112) # (B, 1, 112, 112)
+        # key = self.dwt(self.attack(host_image))
+        key = torch.ones_like(host_image)
+        key = key.view(host_image.size(0), host_image.size(1), 224 * 224)
+        key[:, :, :5000] = 0
+        key = key.view(*host_image.shape)
+        key = self.dwt(key)
+
+        secret_image = self.text_embedding(text_bits)
 
         # freq_secret_image = self.dwt(secret_image)
-
-        freq_container, discarded = self.image_embedding(freq_host_image, secret_image)
+        freq_container, discarded = self.image_embedding(key, freq_host_image, secret_image)
 
         container_image = self.dwt(freq_container, rev=True)
 
@@ -38,13 +44,21 @@ class OurModel(nn.Module):
         return noised_image
 
     def reverse(self, noised_image, sample):
+        key = torch.ones_like(noised_image)
+        key = key.view(noised_image.size(0), noised_image.size(1), 224 * 224)
+        key[:, :, :5000] = 0
+        key = key.view(*noised_image.shape)
+        key = self.dwt(key)
+
         attacked_container = noised_image
 
         freq_attacked_container = self.dwt(attacked_container)
 
-        r_freq_container, r_secret_image = self.image_embedding(freq_attacked_container, sample, rev=True)
+        r_freq_container, r_secret_image = self.image_embedding(key, freq_attacked_container, sample, rev=True)
 
-        return freq_attacked_container, sample, r_freq_container, r_secret_image
+        r_secret = self.text_embedding(r_secret_image, rev=True)
+
+        return (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret
 
 
 class ResidualDenseBlock_out(nn.Module):
@@ -111,7 +125,7 @@ class VitBlock(nn.Module):
         return x
 
 class ResidualVitBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, img_size=112, patch_size=7, embed_dim=256):
+    def __init__(self, in_channels, out_channels, img_size=112, patch_size=7, embed_dim=64):
         super(ResidualVitBlock, self).__init__()
         self.patch_size = patch_size
         self.embed_dim = embed_dim
@@ -128,18 +142,20 @@ class ResidualVitBlock(nn.Module):
 
         # Transformer Encoder
         self.transformer_enc = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4, dropout=0),
-            num_layers=4
+            nn.TransformerEncoderLayer(d_model=embed_dim, nhead=1),
+            num_layers=1
         )
 
         # Project back to the specified output channel space
         self.to_image = nn.ConvTranspose2d(embed_dim, in_channels, kernel_size=self.patch_size,
                                            stride=self.patch_size)
 
+
     def forward(self, t):
         x = t
         # Embed patches
         x = self.patch_embed(x).flatten(2).transpose(1, 2)  # [B, N, D]
+
         x += self.pos_embed  # Add positional encoding
 
         x = self.transformer_enc(x)
@@ -151,38 +167,93 @@ class ResidualVitBlock(nn.Module):
 
         return self.conv(x + t)
 
+
+class ResidualVitBlockQKV(nn.Module):
+    def __init__(self, q_channels, k_channels, v_channels, out_channels, img_size=112, patch_size=7, embed_dim=64, num_heads=1):
+        super(ResidualVitBlockQKV, self).__init__()
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        self.img_size = img_size
+        self.q_channels = q_channels
+        self.k_channels = k_channels
+        self.v_channels = v_channels
+        self.out_channels = out_channels
+        self.num_patches = (img_size // patch_size) ** 2
+
+        self.patch_embed_q = nn.Conv2d(self.q_channels, self.embed_dim, kernel_size=self.patch_size,
+                                       stride=self.patch_size)
+        self.patch_embed_k = nn.Conv2d(self.k_channels, self.embed_dim, kernel_size=self.patch_size,
+                                       stride=self.patch_size)
+        self.patch_embed_v = nn.Conv2d(self.v_channels, self.embed_dim, kernel_size=self.patch_size,
+                                       stride=self.patch_size)
+
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
+
+        self.multihead_attention = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=num_heads)
+
+        self.to_image = nn.ConvTranspose2d(embed_dim, self.q_channels, kernel_size=self.patch_size,
+                                           stride=self.patch_size)
+
+        self.conv = nn.Conv2d(q_channels, out_channels, 3, 1, 1)
+
+    def forward(self, query, key, value):
+        q = self.patch_embed_q(query).flatten(2).transpose(1, 2)  # [B, N, D_q]
+        k = self.patch_embed_k(key).flatten(2).transpose(1, 2)    # [B, N, D]
+        v = self.patch_embed_v(value).flatten(2).transpose(1, 2)  # [B, N, D]
+
+        q += self.pos_embed
+        k += self.pos_embed
+        v += self.pos_embed
+
+        attn_output, attn_output_weights = self.multihead_attention(q, k, v)
+
+        # Reshape back to the output channel format
+        attn_output = attn_output.transpose(1, 2).unflatten(2, (self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
+        attn_output = self.to_image(attn_output)
+
+        return self.conv(attn_output + query)
+        # B, C, W, H = query.size()
+        # split_size = H // 8
+        #
+        # top_part = query[:, :, :split_size, :]
+        # bottom_part = query[:, :, split_size:, :]
+        #
+        # shifted_tensor = torch.cat((bottom_part, top_part), dim=2)
+        #
+        # return shifted_tensor.expand(-1, 12, -1, -1)
+
+
 class INV_block(nn.Module):
-    def __init__(self, subnet_constructor=None, clamp=2.0, in_1=3, in_2=3):
+    def __init__(self, clamp=2.0, channels_x=12, channels_y=1):
         super().__init__()
 
-        self.split_len1 = 12
-        self.split_len2 = 1
+        self.channels_x = channels_x
+        self.channels_y = channels_y
 
         self.clamp = clamp
         # ρ
-        self.r = ResidualDenseBlock_out(self.split_len1, self.split_len2)
+        self.r = ResidualDenseBlock_out(self.channels_x, self.channels_y)
         # η
-        self.y = ResidualDenseBlock_out(self.split_len1, self.split_len2)
+        self.y = ResidualVitBlockQKV(self.channels_x, self.channels_x, self.channels_x, self.channels_y)
         # φ
-        self.f = ResidualDenseBlock_out(self.split_len2, self.split_len1)
+        self.f = ResidualDenseBlock_out(self.channels_y, self.channels_x)
 
     def e(self, s):
         return torch.exp(self.clamp * 2 * (torch.sigmoid(s) - 0.5))
 
-    def forward(self, x, rev=False):
-        x1, x2 = (x.narrow(1, 0, self.split_len1),
-                  x.narrow(1, self.split_len1, self.split_len2))
+    def forward(self, x0, x, rev=False):
+        x1, x2 = (x.narrow(1, 0, self.channels_x),
+                  x.narrow(1, self.channels_x, self.channels_y))
 
         if not rev:
-
             t2 = self.f(x2)
             y1 = x1 + t2
-            s1, t1 = self.r(y1), self.y(y1)
+            s1, t1 = self.r(y1), self.y(y1, x0, x0)
             y2 = self.e(s1) * x2 + t1
 
         else:
 
-            s1, t1 = self.r(x1), self.y(x1)
+            s1, t1 = self.r(x1), self.y(x1, x0, x0)
             y2 = (x2 - t1) / self.e(s1)
             t2 = self.f(y2)
             y1 = (x1 - t2)
@@ -191,74 +262,36 @@ class INV_block(nn.Module):
 
 
 class Hinet(ImageEmbeddingModule):
+    def __init__(self, channels_x, channels_y, width, height):
+        super(Hinet, self).__init__(channels_x=channels_x, channels_y=channels_y, width=width, height=height)
+        self.inv_blocks = nn.ModuleList([INV_block(channels_x=self.channels_x, channels_y=self.channels_y) for _ in range(16)])
+        self.pop_up_process = False
 
-    def __init__(self, channels, width, height):
-        super(Hinet, self).__init__(channels, width, height)
-        self.channels = channels
-        in_1 = self.channels
-        in_2 = 1
-        self.inv1 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv2 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv3 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv4 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv5 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv6 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv7 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv8 = INV_block(in_1=in_1, in_2=in_2)
-
-        self.inv9 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv10 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv11 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv12 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv13 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv14 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv15 = INV_block(in_1=in_1, in_2=in_2)
-        self.inv16 = INV_block(in_1=in_1, in_2=in_2)
-
-    def forward(self, x, y, rev=False):
+    def forward(self, key, x, y, rev=False):
+        self.pop_up_process = self.pop_up_process and not self.training
+        images = []
         x = torch.cat([x, y], dim=1)
         if not rev:
-            out = self.inv1(x)
-            out = self.inv2(out)
-            out = self.inv3(out)
-            out = self.inv4(out)
-            out = self.inv5(out)
-            out = self.inv6(out)
-            out = self.inv7(out)
-            out = self.inv8(out)
-
-            out = self.inv9(out)
-            out = self.inv10(out)
-            out = self.inv11(out)
-            out = self.inv12(out)
-            out = self.inv13(out)
-            out = self.inv14(out)
-            out = self.inv15(out)
-            out = self.inv16(out)
+            out = x
+            for i in range(16):
+                if self.pop_up_process:
+                    images.append(out[0].detach().cpu())
+                out = self.inv_blocks[i](key, out)
 
         else:
-            out = self.inv16(x, rev=True)
-            out = self.inv15(out, rev=True)
-            out = self.inv14(out, rev=True)
-            out = self.inv13(out, rev=True)
-            out = self.inv12(out, rev=True)
-            out = self.inv11(out, rev=True)
-            out = self.inv10(out, rev=True)
-            out = self.inv9(out, rev=True)
-
-            out = self.inv8(out, rev=True)
-            out = self.inv7(out, rev=True)
-            out = self.inv6(out, rev=True)
-            out = self.inv5(out, rev=True)
-            out = self.inv4(out, rev=True)
-            out = self.inv3(out, rev=True)
-            out = self.inv2(out, rev=True)
-            out = self.inv1(out, rev=True)
+            out = x
+            for i in reversed(range(16)):
+                if self.pop_up_process:
+                    images.append(out[0].detach().cpu())
+                out = self.inv_blocks[i](key, out, rev=True)
 
         # split the output
-        len = 12
-        x = out[:, :len, :, :]
-        y = out[:, len:, :, :]
+        x = out[:, :self.channels_x, :, :]
+        y = out[:, self.channels_x:, :, :]
+
+        if self.pop_up_process:
+            pop_up = [[out.view(-1, self.channels_y, self.width, self.height)] for out in images]
+            pop_up_image(pop_up)
         return x, y
 
 
@@ -266,7 +299,7 @@ if __name__ == '__main__':
     test = INV_block()
 
     # test whether it is reversible
-    x = torch.randn(1, 24, 112, 112)
+    x = torch.randn(1, 13, 112, 112)
     out = test(x)
     print(out.shape)
     out = test(out, rev=True)
