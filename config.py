@@ -23,11 +23,11 @@ LAMBDA_SECRET_LOSS = 0.5
 
 SAVE_FREQ = 10
 
-NUM_BITS = 112 * 112
+NUM_BITS = 56 * 56
 DEVICE = 'mps'
 
-TEXT_EMBEDDING_MODULE = 'modules.text_embedding.SimpleTextEmbedding'
-# TEXT_EMBEDDING_MODULE = 'modules.text_embedding.MiddleQuarterSquareTextEmbedding'
+# TEXT_EMBEDDING_MODULE = 'modules.text_embedding.SimpleTextEmbedding'
+TEXT_EMBEDDING_MODULE = 'modules.text_embedding.MiddleQuarterSquareTextEmbedding'
 TEXT_EMBEDDING_CHANNEL = 1
 # TEXT_EMBEDDING_MODULE = 'modules.text_embedding.VitTextEmbedding'
 DWT_MODULE = 'modules.dwt.PRIS_DWT'

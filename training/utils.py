@@ -111,18 +111,43 @@ def pop_up_image(images, display_size=(112, 112)):
 
     plt.show()
 
-def pop_up_attention_map(attention_weights):
+def pop_up_attention_map(attention_weights, query_id=None, patch_size=7):
     if isinstance(attention_weights, torch.Tensor):
         attention_weights = attention_weights.detach().cpu().numpy()
 
-    # Use matplotlib to create a heatmap of the attention weights
-    plt.figure(figsize=(10, 8))
-    plt.imshow(attention_weights, cmap='viridis', interpolation='nearest')
-    plt.colorbar()
-    plt.xlabel('Keys')
-    plt.ylabel('Queries')
-    plt.title('Attention Map')
-    plt.show()
+    if query_id is not None:
+        # Extract the attention weights for the specific query
+        attention_weights = attention_weights[query_id]
+
+        # Create an image where each patch is colored based on the attention weight
+        patch_grid_side = int(np.sqrt(len(attention_weights)))  # Assume square grid
+        img_size = patch_size * patch_grid_side
+
+        attention_image = np.zeros((img_size, img_size))
+
+        for i in range(patch_grid_side):
+            for j in range(patch_grid_side):
+                # Calculate the intensity of the color based on the attention weight
+                intensity = attention_weights[i * patch_grid_side + j]
+                attention_image[i*patch_size:(i+1)*patch_size, j*patch_size:(j+1)*patch_size] = intensity
+
+        # Plot the attention image
+        plt.figure(figsize=(8, 6))
+        plt.imshow(attention_image, cmap='viridis', interpolation='nearest')
+        plt.colorbar()
+        plt.title(f'Attention Map for Query ID {query_id}')
+        plt.axis('off')  # Hide the axes
+        plt.show()
+
+    else:
+        # Use matplotlib to create a heatmap of the attention weights
+        plt.figure(figsize=(10, 8))
+        plt.imshow(attention_weights, cmap='viridis', interpolation='nearest')
+        plt.colorbar()
+        plt.xlabel('Keys')
+        plt.ylabel('Queries')
+        plt.title('Attention Map')
+        plt.show()
 
 mse_loss = torch.nn.MSELoss(reduce=True)
 bce_loss = nn.BCEWithLogitsLoss(reduce=True)

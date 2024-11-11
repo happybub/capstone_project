@@ -253,7 +253,7 @@ def validation(plan_name, epoch, config):
 
 
         # pop_up_image([images[0], container_image[0]])
-        pop_up_image([container_image[0], attacked_image[0], container_image[0] - attacked_image[0]])
+        pop_up_image([images[0], container_image[0], images[0] - container_image[0]])
         print(torch.allclose(container_image, attacked_image, atol=1e-6))
         print(container_image[0].mean(), attacked_image[0].mean(), (container_image[0] - attacked_image[0]).mean())
         bit_acc = (r_secret.round() == secret).float().mean()
@@ -270,16 +270,24 @@ if __name__ == '__main__':
     name = time_str
     print(name)
 
-    # name = '241110_210355' # 减少embed为64
+    # name = '241110_210355' # embed 64
 
-    # name = '241110_161636' # 有效 # embed=128
+    # name = '241110_161636' # embed=128
 
     # name = '241110_234551'
 
     # name = 'vit'
+
+    # name = '241111_060753'
+
+    # name = '241111_074229'
+
+    # name = '241111_080338'
+
+    # name = '241111_082229'
     torch.manual_seed(42)
-    train(name, 1, name, 200, config_map)
+    train(name, 1, name, 100, config_map)
 
     # validation(name, 140, config_map)
-    # validation(name, 30, config_map)
+    # validation(name, 20, config_map)
     # validation('50_only_gen', 50, config_map)
