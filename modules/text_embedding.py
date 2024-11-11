@@ -152,22 +152,10 @@ class SimpleTextEmbedding(TextEmbeddingModule):
         super().__init__(n_bits, channels, width, height)
 
     def transform(self, bits):
-        # assume that n_bits < width * height and len(n_bits) == n_bits
-        batch, n_bits = bits.shape
-        if n_bits != self.n_bits:
-            raise ValueError("The length of input bits does not match the pre-set.")
-        secret_image_flatten = torch.zeros((batch, self.channels, self.width, self.height)).view(batch, -1).to(device=bits.device)
-        secret_image_flatten[:, :self.n_bits] = bits
-        secret_image_flatten = secret_image_flatten.view(batch, self.channels, self.width, self.height)
-
-        return secret_image_flatten
+        return bits.view(-1, self.channels, self.width, self.height)
 
     def reverse(self, x):
-        batch = x.size(0)
-        r_secret_image_flatten = x.view(batch, -1)
-        r_secret = r_secret_image_flatten[:, :self.n_bits]
-        r_secret = r_secret.view(batch, self.n_bits)
-        return r_secret
+        return x.view(x.size(0), -1)
 
 class MiddleQuarterSquareTextEmbedding(TextEmbeddingModule):
     def __init__(self, n_bits, channels, width, height):

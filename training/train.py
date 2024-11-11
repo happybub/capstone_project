@@ -36,13 +36,21 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
     fake_true_num = 0
     update_gen = True
     update_dis = True
+
+    mask_position = torch.zeros(112 * 112, dtype=torch.bool)
+
+    # Randomly choose n_bits positions to set to True
+    mask_position[torch.randperm(112 * 112)[:num_bits]] = True
+
+
     for i, images in enumerate(dataloader):
         # get the host images
         images = images.to(device=device)
 
         # generate the secrets message
         batch = images.size(0)
-        secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
+        mask = mask_position.unsqueeze(0).expand(batch, -1).to(device=device)
+        secret = torch.randint(0, 2, (batch, 112 * 112)).float().to(device=device)
 
         with torch.set_grad_enabled(mode == 'train'):
             if mode == 'train':
@@ -87,7 +95,8 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
             # train the generator on the stego loss
             image_loss = mse_loss(freq_host_image, freq_container)
-            secret_loss = mse_loss(r_secret, secret)
+            # secret_loss = mse_loss(r_secret, secret)
+            secret_loss = mse_loss(r_secret_image.view(*secret.shape) * mask, secret * mask)
             stego_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
 
             if mode == 'train' and not use_dis:
