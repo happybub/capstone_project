@@ -250,12 +250,12 @@ class SAVit(nn.Module):
         k = self.patch_embed_k(key).flatten(2).transpose(1, 2)  # [B, L, D]
         v = self.patch_embed_v(value).flatten(2).transpose(1, 2) # [B, L, D]
 
-        if self.training:
-            mask_ratio = 0.1
-            mask = torch.bernoulli(torch.full((B, q.size(1), 1), fill_value=mask_ratio, device=q.device)).bool()
-            q = q.masked_fill(mask, 0)
-            # k = k.masked_fill(mask, 0)
-            # v = v.masked_fill(mask, 0)
+        # if self.training:
+        #     mask_ratio = 0.1
+        #     mask = torch.bernoulli(torch.full((B, q.size(1), 1), fill_value=mask_ratio, device=q.device)).bool()
+        #     q = q.masked_fill(mask, 0)
+        #     # k = k.masked_fill(mask, 0)
+        #     # v = v.masked_fill(mask, 0)
 
 
         q += self.pos_embed
