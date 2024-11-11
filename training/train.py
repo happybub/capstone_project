@@ -49,7 +49,6 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
 
         # generate the secrets message
         batch = images.size(0)
-        mask = mask_position.unsqueeze(0).expand(batch, -1).to(device=device)
         secret = torch.randint(0, 2, (batch, 112 * 112)).float().to(device=device)
 
         with torch.set_grad_enabled(mode == 'train'):
@@ -235,6 +234,11 @@ def validation(plan_name, epoch, config):
     num_bits = config['NUM_BITS']
     device = config['DEVICE']
 
+    mask_position = torch.zeros(112 * 112, dtype=torch.bool)
+
+    # Randomly choose n_bits positions to set to True
+    mask_position[torch.randperm(112 * 112)[:num_bits]] = True
+
     net = construct_model_from_config(config)
     net.to(device=device)
     load_state_from_checkpoint((net, None, None, None), checkpoints_path, plan_name, epoch)
@@ -243,7 +247,7 @@ def validation(plan_name, epoch, config):
 
     net.image_embedding.pop_up_process = True
 
-    secret = torch.randint(0, 2, (batch, num_bits)).float().to(device=device)
+    secret = torch.randint(0, 2, (batch, 112 * 112)).float().to(device=device)
 
     dataloader = get_dataloader(config)['val']
 
@@ -259,12 +263,9 @@ def validation(plan_name, epoch, config):
         attacked_image = net.attack(container_image).to(device=device)
         (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
 
-
-        # pop_up_image([images[0], container_image[0]])
         pop_up_image([images[0], container_image[0], images[0] - container_image[0]])
-        print(torch.allclose(container_image, attacked_image, atol=1e-6))
         print(container_image[0].mean(), attacked_image[0].mean(), (container_image[0] - attacked_image[0]).mean())
-        bit_acc = (r_secret.round() == secret).float().mean()
+        bit_acc = (r_secret[:, mask_position].round() == secret[:, mask_position]).float().mean()
         print(f'Batch: #{i}, Bit accuracy: {bit_acc}')
         break
 
@@ -293,9 +294,11 @@ if __name__ == '__main__':
     # name = '241111_080338'
 
     # name = '241111_082229'
+
+    name = '241111_103246'
     torch.manual_seed(42)
-    train(name, 1, name, 100, config_map)
+    # train(name, 1, name, 100, config_map)
 
     # validation(name, 140, config_map)
-    # validation(name, 20, config_map)
+    validation(name, 30, config_map)
     # validation('50_only_gen', 50, config_map)
