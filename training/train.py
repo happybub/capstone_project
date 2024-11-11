@@ -91,12 +91,11 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
             attacked_image = net.attack_image(container_image).to(device=device)
 
             (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
-            bit_acc = (r_secret.round() == secret).float().mean()
+            bit_acc = (r_secret[:, mask_position].round() == secret[:, mask_position]).float().mean()
 
             # train the generator on the stego loss
             image_loss = mse_loss(freq_host_image, freq_container)
-            # secret_loss = mse_loss(r_secret, secret)
-            secret_loss = mse_loss(r_secret_image.view(*secret.shape) * mask, secret * mask)
+            secret_loss = mse_loss(r_secret[:, mask_position], secret[:, mask_position])
             stego_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
 
             if mode == 'train' and not use_dis:

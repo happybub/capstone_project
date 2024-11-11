@@ -23,7 +23,7 @@ LAMBDA_SECRET_LOSS = 0.5
 
 SAVE_FREQ = 10
 
-NUM_BITS = 112 * 112
+NUM_BITS = 1024
 DEVICE = 'mps'
 
 TEXT_EMBEDDING_MODULE = 'modules.text_embedding.SimpleTextEmbedding'
