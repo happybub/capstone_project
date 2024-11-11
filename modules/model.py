@@ -337,7 +337,7 @@ class INV_block(nn.Module):
 
         self.clamp = clamp
         # ρ
-        # self.r = ResidualDenseBlock_out((self.channels_x + self.channels_y), (self.channels_x + self.channels_y))
+        # self.y = ResidualDenseBlock_out(self.channels_x, channels_y)
         # self.r = ResidualVitBlockQKV2(q_channels=channels_y, kv_channels=channels_x, query_first=False)
         self.r = ChannelSelfAttention(in_channels=self.channels_x, out_channels=self.channels_y)
         # η
@@ -346,7 +346,7 @@ class INV_block(nn.Module):
         # self.y = ResidualDenseBlock_out(q_channels=channels_y, kv_channels=channels_x, query_first=False)
         # self.y = ResidualDenseBlock_out(self.channels_x, self.channels_y)
         # φ
-        # self.f = ResidualDenseBlock_out((self.channels_x + self.channels_y), (self.channels_x + self.channels_y))
+        # self.f = self.y = ResidualDenseBlock_out(self.channels_y, channels_x)
         self.f = SAVit(in_channels=self.channels_y, out_channels=self.channels_x)
 
     def e(self, s):
