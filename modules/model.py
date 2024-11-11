@@ -382,17 +382,10 @@ class Hinet(ImageEmbeddingModule):
         # x = torch.cat([x, y], dim=1)
         # y = x
         if not rev:
-            for i in range(len(self.inv_blocks)):
+            for i in range(len(self.inv_blocks)) if not rev else reversed(range(len(self.inv_blocks))):
                 if self.pop_up_process:
                     images.append([x[0].view(-1, 3, self.height, self.width).detach().cpu(), y[0].view(-1, 1, self.height, self.width).detach().cpu()])
-                x, y = self.inv_blocks[i](x, y)
-
-        else:
-            for i in reversed(range(len(self.inv_blocks))):
-                if self.pop_up_process:
-                    images.append([x[0].view(-1, 3, self.height, self.width).detach().cpu(), y[0].view(-1, 1, self.height, self.width).detach().cpu()])
-
-                x, y = self.inv_blocks[i](x, y, rev=True)
+                x, y = self.inv_blocks[i](x, y, rev=rev)
 
         # split the output
         # x = x[:, :self.channels_x, :, :]
