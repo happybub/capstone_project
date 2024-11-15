@@ -111,7 +111,7 @@ def pop_up_image(images, display_size=(112, 112)):
 
     plt.show()
 
-def pop_up_attention_map(attention_weights, query_id=None, patch_size=7):
+def pop_up_attention_map(attention_weights, query_id=None, patch_size=7, title=''):
     if isinstance(attention_weights, torch.Tensor):
         attention_weights = attention_weights.detach().cpu().numpy()
 
@@ -135,7 +135,7 @@ def pop_up_attention_map(attention_weights, query_id=None, patch_size=7):
         plt.figure(figsize=(8, 6))
         plt.imshow(attention_image, cmap='viridis', interpolation='nearest')
         plt.colorbar()
-        plt.title(f'Attention Map for Query ID {query_id}')
+        plt.title(f'{title} Attention Map for Query ID {query_id}')
         plt.axis('off')  # Hide the axes
         plt.show()
 
@@ -146,7 +146,7 @@ def pop_up_attention_map(attention_weights, query_id=None, patch_size=7):
         plt.colorbar()
         plt.xlabel('Keys')
         plt.ylabel('Queries')
-        plt.title('Attention Map')
+        plt.title(f'{title} Attention Map')
         plt.show()
 
 mse_loss = torch.nn.MSELoss(reduce=True)

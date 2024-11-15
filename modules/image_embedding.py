@@ -20,7 +20,7 @@ class ImageEmbeddingModule(nn.Module):
         self.width = width
         self.height = height
 
-    def forward(self, image1, image2, rev=False):
+    def forward(self, image1, image2, context, rev=False):
         raise NotImplementedError("This method should be implemented by subclasses.")
 
 

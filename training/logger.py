@@ -1,22 +1,15 @@
 import matplotlib.pyplot as plt
 import torch
-
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-BLUE = "\033[34m"
-MAGENTA = "\033[35m"
-CYAN = "\033[36m"
-WHITE = "\033[37m"
-RESET = "\033[0m"
-
+import math
 
 class Logger:
-    def __init__(self, path):
+    def __init__(self, path, name):
+        self.name = name
         self.logs = []
         self.current_log = {}
         self.path = path
         self.saved_lines = 0
+
 
     def log(self, name, value):
         self.current_log[name] = value
@@ -26,118 +19,72 @@ class Logger:
         self.logs.append(self.current_log)
         self.current_log = {}
 
-    def format_value(self, idx, key, compare=False):
-        cur_value = self.logs[idx][key]
-        pre_value = None
-        if len(self.logs) > 1:
-            pre_value = self.logs[idx - 1][key]
+    def get_values(self, key, cal_mean=False):
+        ret = [log.get(key, float('nan')) for log in self.logs]
+        if cal_mean:
+            return sum([x for x in ret if not math.isnan(x)]) / len(ret)
+        return ret
 
-        # comparable
-        if type(cur_value) == type(pre_value) and isinstance(cur_value, float) and compare:
-            if cur_value < pre_value:
-                # format to .4f
-                return f'{GREEN}{cur_value:.4f}{RESET}'
-            elif cur_value > pre_value:
-                return f'{RED}{cur_value:.4f}{RESET}'
-            else:
-                return f'{cur_value:.4f}'
+    def str_line(self, idx=-1):
+        l = self.logs[idx]
+        s = ', '.join([f'{key}: {l[key]}' for key in l.keys()])
+        return s
 
-        if isinstance(cur_value, float):
-            return f'{cur_value:.4f}'
+    @classmethod
+    def line_graph(cls, logger, keys, save_path=None):
+        """Draw multiple keys from a single Logger instance on one plot."""
+        plt.figure()
+        for key in keys:
+            plt.plot(logger.get_values(key), label=key)
+        plt.legend()
+        plt.xlabel('Epoch')
+        plt.ylabel('Values')
+        plt.title('Multiple Metrics for ' + logger.name)
+        plt.show()
+        if save_path:
+            plt.savefig(save_path)
 
-        return str(cur_value)
-
-    def format_log(self, idx=-1, compare=False):
-        # sort the keys
-        return ', '.join([f'{key}: {self.format_value(idx, key, compare)}' for key in self.logs[idx].keys()])
-
-    def get_values(self, key):
-        return [log[key] for log in self.logs]
-
-    def get_values_mean(self, key):
-        return torch.tensor(self.get_values(key)).mean().item()
-
-    def line_graph(self, key, save_path=None):
-        # pop up the line graph, if save_path is not None, save the graph to the path
-        if isinstance(key, str):
-            plt.plot(self.get_values(key))
+    @classmethod
+    def multi_logger_graph(cls, loggers, keys):
+        """Draw line graphs for each key from multiple Logger instances."""
+        for key in keys:
+            plt.figure()
+            plt.title(key)
+            for logger in loggers:
+                values = logger.get_values(key)
+                if any(not isinstance(v, float) or not math.isnan(v) for v in values):
+                    plt.plot(values, label=logger.name)
             plt.ylabel(key)
-            plt.show()
-            if save_path is not None:
-                plt.savefig(save_path)
-
-        # if the parameter key is a list of keys, draw them in a same graph
-        elif isinstance(key, list):
-            for k in key:
-                plt.plot(self.get_values(k), label=k)
+            plt.xlabel('Epoch')
             plt.legend()
             plt.show()
-            if save_path is not None:
-                plt.savefig(save_path)
 
     def save_to_file(self, mode='a'):
         with open(self.path, mode) as f:
             for i in range(self.saved_lines, len(self.logs)):
-                f.write(f'{self.format_log(i)}\n')
+                f.write(f'{self.str_line(i)}\n')
             self.saved_lines = len(self.logs)
 
+
     def load_from_file(self):
+        if len(self.logs) > 0:
+            return
         with open(self.path, 'r') as file:
             for line in file:
                 log_entry = {}
                 items = line.split(', ')
                 for item in items:
                     key, value = item.split(': ')
-                    # Assuming values that can be converted to float should be
                     try:
                         log_entry[key] = float(value)
                     except ValueError:
                         log_entry[key] = value.strip()
                 self.logs.append(log_entry)
 
-
 if __name__ == '__main__':
-    logger1 = Logger('../logs/241110_161636/val_logs.log')
-    # logger2 = Logger('../logs/241110_210355/val_logs.log')
-    logger2 = Logger('../logs/241111_041840/train_logs.log')
-    logger3 = Logger('../logs/vit/train_logs.log')
-    logger1.load_from_file()
-    logger2.load_from_file()
-    logger3.load_from_file()
+    name = 'y vit; f dense; with occlusion'
+    y_vit = Logger(f'../logs/{name}/val_logs.log', 'y as vit with occlusion attack')
+    y_vit.load_from_file()
 
-    Secret_16_blocks = logger1.get_values('Secret')
-    Image_16_blocks = logger1.get_values('Image')
-    Acc_16_blocks = logger1.get_values('Acc')
-
-    Secret_6_blocks = logger2.get_values('Secret')
-    Image_6_blocks = logger2.get_values('Image')
-    Acc_6_blocks = logger2.get_values('Acc')
-
-    Secret_4_Attn_blocks = logger3.get_values('Secret')
-    Image_4_Attn_blocks = logger3.get_values('Image')
-    Acc_4_Attn_blocks = logger3.get_values('Acc')
-
-
-
-
-    # plot
-    plt.plot(Secret_16_blocks, label='Secret_16_blocks')
-    # plt.plot(Image_16_blocks, label='Image_16_blocks')
-    plt.plot(Secret_6_blocks, label='Secret_6_blocks')
-    # plt.plot(Image_6_blocks, label='Image_6_blocks')
-    plt.plot(Secret_4_Attn_blocks, label='Secret_4_Attn_blocks')
-    # plt.plot(Image_4_Attn_blocks, label='Image_4_Attn_blocks')
-    plt.ylabel('Secret')
-    plt.legend()
-    plt.show()
-
-    plt.plot(Acc_16_blocks, label='Acc_16_blocks')
-    plt.plot(Acc_6_blocks, label='Acc_6_blocks')
-    plt.plot(Acc_4_Attn_blocks, label='Acc_4_Attn_blocks')
-    plt.ylabel('Acc')
-    plt.legend()
-    plt.show()
-
-    #logger1.line_graph(["Secret", "Image"])
-    #logger.line_graph(["Acc"])
-
+    Logger.line_graph(y_vit, ["Secret", "Image", "Acc"])
+    Logger.multi_logger_graph([y_vit], ["Secret", "Image", "Acc"])

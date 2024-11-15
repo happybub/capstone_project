@@ -33,9 +33,9 @@ TEXT_EMBEDDING_CHANNEL = 1
 DWT_MODULE = 'modules.dwt.PRIS_DWT'
 IMAGE_EMBEDDING_MODULE = 'modules.model.Hinet'
 
-ATTACK_MODULE = 'modules.attack.NoneAttack'
+# ATTACK_MODULE = 'modules.attack.NoneAttack'
 # ATTACK_MODULE = 'modules.attack.JPEGCompressionPRISAttack'
-# ATTACK_MODULE = 'modules.attack.OcclusionAttack'
+ATTACK_MODULE = 'modules.attack.OcclusionAttack'
 # ATTACK_MODULE = 'modules.attack.OrderOcclusionAttack'
 LEARNING_RATE = 10 ** (-4)
 

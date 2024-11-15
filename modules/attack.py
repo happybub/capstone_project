@@ -229,22 +229,19 @@ class OcclusionAttack(AttackModule):
         super().__init__()
         self.width = width
         self.height = height
-        self.x_offset = 0
-        self.y_offset = 0
 
-    def forward(self, image, random=False):
+    def forward(self, image):
         n, c, h, w = image.shape
         occluded_image = image.clone()
         # height = np.random.randint(self.height // 2, self.height)
         # width = np.random.randint(self.width // 2, self.width)
-        height = self.height
-        width = self.width
+        height = h // 2
+        width = w // 2
+        y_offset = h // 4
+        x_offset = w // 4
         # randomly select the position of the occlusion
-        if random:
-            self.x_offset = np.random.randint(0, w - self.width + 1)
-            self.y_offset = np.random.randint(0, h - self.height + 1)
 
-        occluded_image[:, :, self.y_offset:self.y_offset + height, self.x_offset:self.x_offset + width] = 0
+        occluded_image[:, :, y_offset:y_offset + height, x_offset:x_offset + width] = 0
         return occluded_image
 
 class OrderOcclusionAttack(AttackModule):

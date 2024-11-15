@@ -13,6 +13,11 @@ from training_utils import load_state_from_checkpoint, save_state_to_checkpoint,
 
 from training.logger import Logger
 
+mask_position = torch.zeros(112 * 112, dtype=torch.bool)
+
+# Randomly choose n_bits positions to set to True
+mask_position[torch.randperm(112 * 112)[:get_config()["NUM_BITS"]]] = True
+
 
 def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_logger: Logger, mode='train'):
     net, optim, discriminator, discriminator_optim = model
@@ -37,10 +42,7 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
     update_gen = True
     update_dis = True
 
-    mask_position = torch.zeros(112 * 112, dtype=torch.bool)
 
-    # Randomly choose n_bits positions to set to True
-    mask_position[torch.randperm(112 * 112)[:num_bits]] = True
 
 
     for i, images in enumerate(dataloader):
@@ -58,38 +60,39 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
                     discriminator_optim.zero_grad()
 
             # forward pass
-            (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images)
+
+            (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images, net.dwt(net.attack_image(images)).mean(dim=1, keepdims=True))
             sample = torch.rand_like(discarded).to(device=device)
 
             # the model contains the generator and discriminator
-            if use_dis:
-                # train the discriminator on the fake data
-                fake_image = net.dwt(discarded.detach(), rev=True)
-                fake_output = discriminator(fake_image)
-                fake_loss = bce_loss(fake_output, torch.zeros_like(fake_output))
-
-                # the fake_output is a logit, so we need to convert it to probability
-                fake_true_num += (fake_output < 0.5).float().sum().item()
-
-                if mode == 'train':
-                    fake_loss.backward()
-
-                # train the discriminator on the real data
-                original_image = sample
-                real_output = discriminator(original_image)
-                real_loss = bce_loss(real_output, torch.ones_like(real_output))
-
-                real_true_num += (real_output > 0.5).float().sum().item()
-                if mode == 'train':
-                    real_loss.backward()
-
-                # update the discriminator
-                if mode == 'train' and update_dis:
-                    discriminator_optim.step()
+            # if use_dis:
+            #     # train the discriminator on the fake data
+            #     fake_image = net.dwt(discarded.detach(), rev=True)
+            #     fake_output = discriminator(fake_image)
+            #     fake_loss = bce_loss(fake_output, torch.zeros_like(fake_output))
+            #
+            #     # the fake_output is a logit, so we need to convert it to probability
+            #     fake_true_num += (fake_output < 0.5).float().sum().item()
+            #
+            #     if mode == 'train':
+            #         fake_loss.backward()
+            #
+            #     # train the discriminator on the real data
+            #     original_image = sample
+            #     real_output = discriminator(original_image)
+            #     real_loss = bce_loss(real_output, torch.ones_like(real_output))
+            #
+            #     real_true_num += (real_output > 0.5).float().sum().item()
+            #     if mode == 'train':
+            #         real_loss.backward()
+            #
+            #     # update the discriminator
+            #     if mode == 'train' and update_dis:
+            #         discriminator_optim.step()
 
             attacked_image = net.attack_image(container_image).to(device=device)
 
-            (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
+            (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample, net.dwt(attacked_image).mean(dim=1, keepdims=True))
             bit_acc = (r_secret[:, mask_position].round() == secret[:, mask_position]).float().mean()
 
             # train the generator on the stego loss
@@ -119,32 +122,32 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
             'Update Dis', update_dis) \
             .log('Image', image_loss.item()).log('Secret', secret_loss.item()).log('Total', stego_loss.item()).log(
             'Acc', bit_acc.item())
-        if use_dis:
-            batches_logger.log('Real', real_loss.item()).log('Fake', fake_loss.item()).log('Fool', fool_loss.item())
+        # if use_dis:
+        #     batches_logger.log('Real', real_loss.item()).log('Fake', fake_loss.item()).log('Fool', fool_loss.item())
         batches_logger.save()
         if platform.system() == 'Linux':
-            print(batches_logger.format_log(compare=True), end='\r')
+            print(batches_logger.str_line(), end='\r')
         else:
-            print('\r', batches_logger.format_log(compare=True), end='')
+            print('\r', batches_logger.str_line(), end='')
 
     epochs_logger.log('Epoch', epoch).log('Mode', mode)
-    epochs_logger.log("Image", batches_logger.get_values_mean('Image')) \
-        .log("Secret", batches_logger.get_values_mean('Secret')) \
-        .log("Total", batches_logger.get_values_mean('Total')) \
-        .log("Acc", batches_logger.get_values_mean('Acc'))
-    if use_dis:
-        epochs_logger.log("Real", batches_logger.get_values_mean('Real')) \
-            .log("Fake", batches_logger.get_values_mean('Fake')) \
-            .log("Fool", batches_logger.get_values_mean('Fool'))
-        epochs_logger.log("Real Acc", real_true_num / len(dataloader.dataset)).log("Fake Acc", fake_true_num / len(
-            dataloader.dataset))
+    epochs_logger.log("Image", batches_logger.get_values('Image', cal_mean=True)) \
+        .log("Secret", batches_logger.get_values('Secret', cal_mean=True)) \
+        .log("Total", batches_logger.get_values('Total', cal_mean=True)) \
+        .log("Acc", batches_logger.get_values('Acc', cal_mean=True))
+    # if use_dis:
+    #     epochs_logger.log("Real", batches_logger.get_values_mean('Real')) \
+    #         .log("Fake", batches_logger.get_values_mean('Fake')) \
+    #         .log("Fool", batches_logger.get_values_mean('Fool'))
+    #     epochs_logger.log("Real Acc", real_true_num / len(dataloader.dataset)).log("Fake Acc", fake_true_num / len(
+    #         dataloader.dataset))
 
     epochs_logger.save()
     if mode == 'val':
         if platform.system() == 'Linux':
-            print(epochs_logger.format_log(compare=True))
+            print(epochs_logger.str_line())
         else:
-            print('\r', epochs_logger.format_log(compare=True))
+            print('\r', epochs_logger.str_line())
 
 
 def train(based_name, start_epoch, plan_name, end_epoch, config):
@@ -188,8 +191,8 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
 
     logs_path = str(config['LOGS_PATH'])
     os.makedirs(os.path.join(logs_path, plan_name), exist_ok=True)
-    train_epochs_logger = Logger(os.path.join(logs_path, plan_name, 'train_logs.log'))
-    val_epochs_logger = Logger(os.path.join(logs_path, plan_name, 'val_logs.log'))
+    train_epochs_logger = Logger(os.path.join(logs_path, plan_name, 'train_logs.log'), plan_name)
+    val_epochs_logger = Logger(os.path.join(logs_path, plan_name, 'val_logs.log'), plan_name)
 
     # get the save frequency
     save_freq = config['SAVE_FREQ']
@@ -199,14 +202,14 @@ def train(based_name, start_epoch, plan_name, end_epoch, config):
     for epoch in range(start_epoch, end_epoch + 1):
         # continue the training
         # print("Training epoch: ", epoch)
-        train_batches_logger = Logger(os.path.join(logs_path, plan_name, f'train_epoch_{epoch}.log'))
+        train_batches_logger = Logger(os.path.join(logs_path, plan_name, f'train_epoch_{epoch}.log'), plan_name)
         train_epoch(model, dataloader_map, config, epoch, train_epochs_logger, train_batches_logger, mode='train')
         train_batches_logger.save_to_file()
 
         # validate the model
         # print("Validating epoch: ", epoch)
         # net.image_embedding.pop_up_process = True
-        val_batches_logger = Logger(os.path.join(logs_path, plan_name, f'val_epoch_{epoch}.log'))
+        val_batches_logger = Logger(os.path.join(logs_path, plan_name, f'val_epoch_{epoch}.log'), plan_name)
         train_epoch(model, dataloader_map, config, epoch, val_epochs_logger, val_batches_logger, mode='val')
 
         # save the logs in one epoch
@@ -257,11 +260,11 @@ def validation(plan_name, epoch, config):
 
         images = images.to(device=device)
 
-        (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images)
+
+        (freq_host_image, secret_image, freq_container, discarded), container_image = net(secret, images, net.dwt(net.attack_image(images)).mean(dim=1, keepdims=True))
         sample = torch.rand_like(discarded).to(device=device)
-        net.attack.x_offset = net.attack.y_offset = 56
         attacked_image = net.attack(container_image).to(device=device)
-        (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample)
+        (freq_attacked_container, sample, r_freq_container, r_secret_image), r_secret = net.reverse(attacked_image, sample, net.dwt(attacked_image).mean(dim=1, keepdims=True))
 
         pop_up_image([images[0], container_image[0], images[0] - container_image[0]])
         print(container_image[0].mean(), attacked_image[0].mean(), (container_image[0] - attacked_image[0]).mean())
@@ -295,10 +298,22 @@ if __name__ == '__main__':
 
     # name = '241111_082229'
 
-    name = '241111_103246'
+    # name = '241111_103246'
+
+
+
+    # f -vit y-denseblock
+    # name = '241116_012647'
+
+    # y -vit f-denseblock occlusion
+    # name = 'y vit; f dense; with occlusion'
+
+    # name = 'y vit; f dense' # 10
+    name = 'y vit; f vit' # 10
+
     torch.manual_seed(42)
-    # train(name, 1, name, 100, config_map)
+    # train(name, 0, name, 400, config_map)
 
     # validation(name, 140, config_map)
-    validation(name, 30, config_map)
+    validation(name, 9, config_map)
     # validation('50_only_gen', 50, config_map)
