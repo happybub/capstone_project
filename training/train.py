@@ -312,8 +312,8 @@ if __name__ == '__main__':
     name = 'y vit; f vit' # 10
 
     torch.manual_seed(42)
-    # train(name, 0, name, 400, config_map)
+    train(name, 0, name, 400, config_map)
 
     # validation(name, 140, config_map)
-    validation(name, 9, config_map)
+    # validation(name, 9, config_map)
     # validation('50_only_gen', 50, config_map)
