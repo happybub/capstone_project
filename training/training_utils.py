@@ -36,6 +36,26 @@ def construct_discriminator_from_config(config):
     return discriminator
 
 
+# def load_state_from_checkpoint(model, checkpoints_path, plan_name: str, epoch):
+#     net, optim, discriminator, discriminator_optim = model
+#     models_info = [
+#         ('model', f'{epoch}.pth', net),
+#         ('optim', f'{epoch}_optim.pth', optim),
+#         ('discriminator', f'{epoch}_discriminator.pth', discriminator),
+#         ('discriminator_optim', f'{epoch}_discriminator_optim.pth', discriminator_optim)
+#     ]
+#     os.makedirs(os.path.join(checkpoints_path, plan_name), exist_ok=True)
+#     for name, file_name, module in models_info:
+#         if module is None:
+#             print(f'{name} is None')
+#             continue
+#         path = os.path.join(checkpoints_path, plan_name, file_name)
+#         if os.path.exists(path):
+#             module.load_state_dict(torch.load(path))
+#             print(f'Load the {name} from {epoch}.pth')
+#         else:
+#             print(f'No {name} found in {epoch}.pth')
+
 def load_state_from_checkpoint(model, checkpoints_path, plan_name: str, epoch):
     net, optim, discriminator, discriminator_optim = model
     models_info = [
@@ -51,7 +71,8 @@ def load_state_from_checkpoint(model, checkpoints_path, plan_name: str, epoch):
             continue
         path = os.path.join(checkpoints_path, plan_name, file_name)
         if os.path.exists(path):
-            module.load_state_dict(torch.load(path))
+            state_dict = torch.load(path, map_location=torch.device('cpu'), weights_only=True)
+            module.load_state_dict(state_dict)
             print(f'Load the {name} from {epoch}.pth')
         else:
             print(f'No {name} found in {epoch}.pth')

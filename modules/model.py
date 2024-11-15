@@ -7,6 +7,7 @@ from modules.dwt import DWTModule
 from modules.image_embedding import ImageEmbeddingModule
 from modules.attack import AttackModule
 from training.utils import initialize_weights, pop_up_image
+from torchviz import make_dot
 
 
 class Stego(nn.Module):
@@ -108,10 +109,11 @@ class VitBlock(nn.Module):
 
         # Reshape back to the output channel format
         x = x.transpose(1, 2).unflatten(2, (
-        self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
+            self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
         x = self.to_image(x)
 
         return x
+
 
 class ResidualVitBlock(nn.Module):
     def __init__(self, in_channels, out_channels, img_size=112, patch_size=7, embed_dim=64):
@@ -139,7 +141,6 @@ class ResidualVitBlock(nn.Module):
         self.to_image = nn.ConvTranspose2d(embed_dim, in_channels, kernel_size=self.patch_size,
                                            stride=self.patch_size)
 
-
     def forward(self, t):
         x = t
         # Embed patches
@@ -151,14 +152,15 @@ class ResidualVitBlock(nn.Module):
 
         # Reshape back to the output channel format
         x = x.transpose(1, 2).unflatten(2, (
-        self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
+            self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
         x = self.to_image(x)
 
         return self.conv(x + t)
 
 
 class MultiLayerResidualVitBlock(nn.Module):
-    def __init__(self, q_channels, k_channels, v_channels, out_channels=1, img_size=112, patch_size=7, embed_dim=64, num_heads=1):
+    def __init__(self, q_channels, k_channels, v_channels, out_channels=1, img_size=112, patch_size=7, embed_dim=64,
+                 num_heads=1):
         super(MultiLayerResidualVitBlock, self).__init__()
         self.patch_size = patch_size
         self.embed_dim = embed_dim
@@ -178,7 +180,8 @@ class MultiLayerResidualVitBlock(nn.Module):
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
 
-        self.multihead_attention = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=num_heads, batch_first=True)
+        self.multihead_attention = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=num_heads,
+                                                         batch_first=True)
 
         self.to_image = nn.ConvTranspose2d(embed_dim, self.q_channels, kernel_size=self.patch_size,
                                            stride=self.patch_size)
@@ -191,7 +194,7 @@ class MultiLayerResidualVitBlock(nn.Module):
 
     def forward(self, query, key, value):
         q = self.patch_embed_q(query).flatten(2).transpose(1, 2)  # [B, N_q, D_q]
-        k = self.patch_embed_k(key).flatten(2).transpose(1, 2)    # [B, N_k, D]
+        k = self.patch_embed_k(key).flatten(2).transpose(1, 2)  # [B, N_k, D]
         v = self.patch_embed_v(value).flatten(2).transpose(1, 2)  # [B, N_v, D]
 
         q += self.pos_embed
@@ -200,13 +203,13 @@ class MultiLayerResidualVitBlock(nn.Module):
 
         attn_output, attn_output_weights = self.multihead_attention(q, k, v)
 
-
         # Reshape back to the output channel format
-        attn_output = attn_output.transpose(1, 2).unflatten(2, (self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
+        attn_output = attn_output.transpose(1, 2).unflatten(2, (
+        self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
         attn_output = self.to_image(attn_output)
 
-
         return self.conv(attn_output + query)
+
 
 import torch
 import torch.nn as nn
@@ -282,6 +285,79 @@ class SAVit(nn.Module):
         return attn_output
 
 
+# class SAVit(nn.Module):
+#     def __init__(self, in_channels, out_channels, img_size=112, patch_size=7, embed_dim=64, num_heads=8, num_layers=2,
+#                  plot_fig=False):
+#         super(SAVit, self).__init__()
+#         self.patch_size = patch_size
+#         self.embed_dim = embed_dim
+#         self.img_size = img_size
+#         self.in_channels = in_channels
+#         self.out_channels = out_channels
+#         self.plot_fig = plot_fig
+#
+#         self.num_patches = (img_size // patch_size) ** 2
+#
+#         self.patch_embed_q = nn.Conv2d(self.in_channels, self.embed_dim, kernel_size=self.patch_size,
+#                                        stride=self.patch_size)
+#         self.patch_embed_k = nn.Conv2d(self.in_channels, self.embed_dim, kernel_size=self.patch_size,
+#                                        stride=self.patch_size)
+#         self.patch_embed_v = nn.Conv2d(self.in_channels, self.embed_dim, kernel_size=self.patch_size,
+#                                        stride=self.patch_size)
+#
+#         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
+#
+#         self.norms = nn.ModuleList([nn.LayerNorm(embed_dim) for _ in range(num_layers)])
+#
+#         self.multihead_attentions = nn.ModuleList([
+#             nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=num_heads, batch_first=True)
+#             for _ in range(num_layers)
+#         ])
+#
+#         self.to_image = nn.ConvTranspose2d(embed_dim, self.out_channels, kernel_size=self.patch_size,
+#                                            stride=self.patch_size)
+#
+#         torch.nn.init.xavier_normal_(self.patch_embed_q.weight)
+#         torch.nn.init.xavier_normal_(self.patch_embed_k.weight)
+#         torch.nn.init.xavier_normal_(self.patch_embed_v.weight)
+#
+#     def forward(self, x):
+#         B, C, H, W = x.shape  # [B, C, H, W]
+#         query = key = value = x
+#
+#         q = self.patch_embed_q(query).flatten(2).transpose(1, 2)  # [B, L, D]
+#         k = self.patch_embed_k(key).flatten(2).transpose(1, 2)  # [B, L, D]
+#         v = self.patch_embed_v(value).flatten(2).transpose(1, 2)  # [B, L, D]
+#
+#         q += self.pos_embed
+#         k += self.pos_embed
+#         v += self.pos_embed
+#
+#         avg_attn_weight_list = []
+#         # Pass through each attention layer
+#         for i, (norm, mha) in enumerate(zip(self.norms, self.multihead_attentions)):
+#             q = norm(q)
+#             attn_output, attn_output_weights = mha(q, k, v)  # [B, L, D], [B, L, L]
+#             q = attn_output + q
+#             avg_attn_weight_list.append(attn_output_weights)
+#
+#         # [B, L, D] -> [B, D, L] -> [B, D, H, W]
+#         attn_output = q.transpose(1, 2).unflatten(2, (
+#         self.img_size // self.patch_size, self.img_size // self.patch_size)).contiguous()
+#
+#         # [B, D, H, W] -> [B, C, H, W]
+#         attn_output = self.to_image(attn_output)
+#
+#         if self.plot_fig:
+#             self.plot_model_graph(x)
+#
+#         return attn_output
+#
+#     def plot_model_graph(self, input):
+#         y = self.forward(input)
+#         make_dot(y, params=dict(list(self.named_parameters()))).render("vit_model", format="png")
+
+
 class ChannelSelfAttention(nn.Module):
     def __init__(self, in_channels, out_channels, img_size=112, patch_size=7, embed_dim=64, num_heads=8):
         super(ChannelSelfAttention, self).__init__()
@@ -315,7 +391,7 @@ class ChannelSelfAttention(nn.Module):
         attn_output, attn_map = self.attn(x, x, x)  # [C, B, embed_dim]
 
         from training.utils import pop_up_attention_map
-        # pop_up_attention_map(attn_map.permute(1, 0, 2).mean(dim=1))
+        pop_up_attention_map(attn_map.permute(1, 0, 2).mean(dim=1))
 
         x = attn_output.permute(1, 0, 2)  # to [B, C, embed_dim]
 
@@ -324,8 +400,6 @@ class ChannelSelfAttention(nn.Module):
         x = self.conv(x)
 
         return x
-
-
 
 
 class INV_block(nn.Module):
@@ -337,17 +411,17 @@ class INV_block(nn.Module):
 
         self.clamp = clamp
         # ρ
-        # self.y = ResidualDenseBlock_out(self.channels_x, channels_y)
+        self.r = ResidualDenseBlock_out(self.channels_x, channels_y)
         # self.r = ResidualVitBlockQKV2(q_channels=channels_y, kv_channels=channels_x, query_first=False)
-        self.r = ChannelSelfAttention(in_channels=self.channels_x, out_channels=self.channels_y)
+        # self.r = ChannelSelfAttention(in_channels=self.channels_x, out_channels=self.channels_y)
         # η
-        # self.y = ResidualDenseBlock_out(self.channels_x, channels_y)
-        self.y = SAVit(in_channels=self.channels_x, out_channels=self.channels_y)
+        self.y = ResidualDenseBlock_out(self.channels_x, channels_y)
+        # self.y = SAVit(in_channels=self.channels_x, out_channels=self.channels_y)
         # self.y = ResidualDenseBlock_out(q_channels=channels_y, kv_channels=channels_x, query_first=False)
         # self.y = ResidualDenseBlock_out(self.channels_x, self.channels_y)
         # φ
-        # self.f = self.y = ResidualDenseBlock_out(self.channels_y, channels_x)
-        self.f = SAVit(in_channels=self.channels_y, out_channels=self.channels_x)
+        self.f = ResidualDenseBlock_out(self.channels_y, channels_x)
+        # self.f = SAVit(in_channels=self.channels_y, out_channels=self.channels_x)
 
     def e(self, s):
         return torch.exp(self.clamp * 2 * (torch.sigmoid(s) - 0.5))
@@ -373,7 +447,8 @@ class INV_block(nn.Module):
 class Hinet(ImageEmbeddingModule):
     def __init__(self, channels_x, channels_y, width, height):
         super(Hinet, self).__init__(channels_x=channels_x, channels_y=channels_y, width=width, height=height)
-        self.inv_blocks = nn.ModuleList([INV_block(channels_x=self.channels_x, channels_y=self.channels_y) for _ in range(16)])
+        self.inv_blocks = nn.ModuleList(
+            [INV_block(channels_x=self.channels_x, channels_y=self.channels_y) for _ in range(16)])
         self.pop_up_process = False
 
     def forward(self, x, y, rev=False):
@@ -383,7 +458,8 @@ class Hinet(ImageEmbeddingModule):
         # y = x
         for i in range(len(self.inv_blocks)) if not rev else reversed(range(len(self.inv_blocks))):
             if self.pop_up_process:
-                images.append([x[0].view(-1, 3, self.height, self.width).detach().cpu(), y[0].view(-1, 1, self.height, self.width).detach().cpu()])
+                images.append([x[0].view(-1, 3, self.height, self.width).detach().cpu(),
+                               y[0].view(-1, 1, self.height, self.width).detach().cpu()])
             x, y = self.inv_blocks[i](x, y, rev=rev)
 
         # split the output
@@ -410,5 +486,3 @@ if __name__ == '__main__':
     print(torch.allclose(x, out))
     print(x)
     print(out)
-
-

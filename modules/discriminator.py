@@ -57,6 +57,7 @@ class Discriminator_AvgPool(nn.Module):
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
             nn.Linear(256, 1),
+            nn.Sigmoid()
         )
 
     def forward(self, x):

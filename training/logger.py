@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import torch
+import os
 
 RED = "\033[31m"
 GREEN = "\033[32m"
@@ -9,6 +10,7 @@ MAGENTA = "\033[35m"
 CYAN = "\033[36m"
 WHITE = "\033[37m"
 RESET = "\033[0m"
+
 
 
 class Logger:
@@ -97,47 +99,57 @@ class Logger:
 
 
 if __name__ == '__main__':
-    logger1 = Logger('../logs/241110_161636/val_logs.log')
-    # logger2 = Logger('../logs/241110_210355/val_logs.log')
-    logger2 = Logger('../logs/241111_041840/train_logs.log')
-    logger3 = Logger('../logs/vit/train_logs.log')
+    log_plt_path = "../log_plots/"
+    model_name = '12_avgpolgan' + '/'
+    start = 40
+
+    #types = ['Image', 'Secret', 'Total', 'Acc']
+    os.makedirs("log_plt_path", exist_ok=True)
+
+    log_path = '../logs/' + model_name
+
+    os.makedirs(log_plt_path + model_name, exist_ok=True)
+
+    logger1 = Logger(log_path + '/val_logs.log')
     logger1.load_from_file()
-    logger2.load_from_file()
-    logger3.load_from_file()
-
-    Secret_16_blocks = logger1.get_values('Secret')
-    Image_16_blocks = logger1.get_values('Image')
-    Acc_16_blocks = logger1.get_values('Acc')
-
-    Secret_6_blocks = logger2.get_values('Secret')
-    Image_6_blocks = logger2.get_values('Image')
-    Acc_6_blocks = logger2.get_values('Acc')
-
-    Secret_4_Attn_blocks = logger3.get_values('Secret')
-    Image_4_Attn_blocks = logger3.get_values('Image')
-    Acc_4_Attn_blocks = logger3.get_values('Acc')
+    logger1.line_graph(['Real Acc', 'Fake Acc'])
 
 
-
-
-    # plot
-    plt.plot(Secret_16_blocks, label='Secret_16_blocks')
-    # plt.plot(Image_16_blocks, label='Image_16_blocks')
-    plt.plot(Secret_6_blocks, label='Secret_6_blocks')
-    # plt.plot(Image_6_blocks, label='Image_6_blocks')
-    plt.plot(Secret_4_Attn_blocks, label='Secret_4_Attn_blocks')
-    # plt.plot(Image_4_Attn_blocks, label='Image_4_Attn_blocks')
-    plt.ylabel('Secret')
-    plt.legend()
-    plt.show()
-
-    plt.plot(Acc_16_blocks, label='Acc_16_blocks')
-    plt.plot(Acc_6_blocks, label='Acc_6_blocks')
-    plt.plot(Acc_4_Attn_blocks, label='Acc_4_Attn_blocks')
-    plt.ylabel('Acc')
-    plt.legend()
-    plt.show()
-
-    #logger1.line_graph(["Secret", "Image"])
-    #logger.line_graph(["Acc"])
-
+    # logger2 = Logger(log_path + '/train_logs.log')
+    # #logger3 = Logger('../logs/vit/train_logs.log')
+    # logger1.load_from_file()
+    # # logger2.load_from_file()
+    # #logger3.load_from_file()
+    #
+    # type_dic = logger2.logs[0]
+    # keys = list(type_dic.keys())
+    #
+    # keys_to_remove = ['epoch', 'mode']
+    # for key in keys_to_remove:
+    #     if key in type_dic:
+    #         del type_dic[key]
+    #
+    # for t in type_dic:
+    #     valid = logger2.get_values(t)
+    #     train = logger1.get_values(t)
+    #
+    #     # plot
+    #     plt.plot(valid, label='valid')
+    #     plt.plot(train, label='train')
+    #
+    #     plt.ylabel(t)
+    #     plt.legend()
+    #     plt.savefig(log_plt_path + model_name + t + '.png', format='png', dpi=300)
+    #     plt.clf()
+    #
+    #     _valid = logger2.get_values(t)[start:]
+    #     _train = logger1.get_values(t)[start:]
+    #
+    #     # plot
+    #     plt.plot(_valid, label='valid')
+    #     plt.plot(_train, label='train')
+    #
+    #     plt.ylabel(t)
+    #     plt.legend()
+    #     plt.savefig(log_plt_path + model_name + '_' + t + '.png', format='png', dpi=300)
+    #     plt.clf()
