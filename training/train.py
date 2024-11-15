@@ -95,7 +95,7 @@ def train_epoch(model, dataloader_map, config, epoch, epochs_logger, batches_log
             # train the generator on the stego loss
             image_loss = mse_loss(freq_host_image, freq_container)
             secret_loss = mse_loss(r_secret[:, mask_position], secret[:, mask_position])
-            stego_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss
+            stego_loss = lambda_image_loss * image_loss + lambda_secret_loss * secret_loss + torch.norm(discarded, p=2)
 
             if mode == 'train' and not use_dis:
                 # Since the backward of the fool_loss and stego_loss share some parts of the computation graph,
@@ -297,8 +297,8 @@ if __name__ == '__main__':
 
     name = '241111_103246'
     torch.manual_seed(42)
-    # train(name, 1, name, 100, config_map)
+    train(name, 1, name, 100, config_map)
 
     # validation(name, 140, config_map)
-    validation(name, 30, config_map)
+    # validation(name, 30, config_map)
     # validation('50_only_gen', 50, config_map)
