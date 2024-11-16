@@ -308,8 +308,8 @@ if __name__ == '__main__':
     # y -vit f-denseblock occlusion
     # name = 'y vit; f dense; with occlusion'
 
-    # name = 'y vit; f dense' # 10
-    name = 'y vit; f vit' # 10
+    name = 'y vit; f dense' # 10
+    # name = 'y vit; f vit' # 10
 
     torch.manual_seed(42)
     train(name, 0, name, 400, config_map)

@@ -363,8 +363,8 @@ class INV_block(nn.Module):
         # self.y = ResidualDenseBlock_out(q_channels=channels_y, kv_channels=channels_x, query_first=False)
         # self.y = ResidualDenseBlock_out(self.channels_x, self.channels_y)
         # φ
-        self.f = MultiLayerResidualVitBlock(q_channels=self.channels_y, k_channels=1, v_channels=1, out_channels=self.channels_x)
-        # self.f = ResidualDenseBlock_out(self.channels_y, channels_x)
+        # self.f = MultiLayerResidualVitBlock(q_channels=self.channels_y, k_channels=1, v_channels=1, out_channels=self.channels_x)
+        self.f = ResidualDenseBlock_out(self.channels_y, channels_x)
         # self.f = SAVit(in_channels=self.channels_y, out_channels=self.channels_x)
 
     def e(self, s):
@@ -377,19 +377,17 @@ class INV_block(nn.Module):
         #             x_.narrow(1, self.channels_x, self.channels_y))
 
         if not rev:
-            biasf, attn_mapf = self.f(y, context, context)
-            new_x = x + biasf
+            new_x = x + self.f(y)
             biasy, attn_mapy = self.y(new_x, context, context)
             new_y = self.e(self.r(new_x)) * y + biasy
             # new_y = y + self.y(new_x)
-            return new_x, new_y, attn_mapf, attn_mapy
+            return new_x, new_y, attn_mapy
         else:
             # pre_y = y - self.y(x)
             biasy, attn_mapy = self.y(x, context, context)
             pre_y = (y - biasy) / self.e(self.r(x))
-            biasf, attn_mapf = self.f(pre_y, context, context)
-            pre_x = x - biasf
-            return pre_x, pre_y, attn_mapf, attn_mapy
+            pre_x = x - self.f(pre_y)
+            return pre_x, pre_y, attn_mapy
 
 
 class Hinet(ImageEmbeddingModule):
@@ -410,9 +408,9 @@ class Hinet(ImageEmbeddingModule):
             if self.pop_up_process:
                 images.append([x[0].view(-1, 3, self.height, self.width).detach().cpu(),
                                y[0].view(-1, 1, self.height, self.width).detach().cpu()])
-            x, y, attn_mapf, attn_mapy = self.inv_blocks[i](x, y, context, rev=rev)
+            x, y, attn_mapy = self.inv_blocks[i](x, y, context, rev=rev)
             if self.pop_up_process:
-                attn_mapsf.append(attn_mapf[0])  # only add the first in the batch
+                # attn_mapsf.append(attn_mapf[0])  # only add the first in the batch
                 attn_mapsy.append(attn_mapy[0])  # only add the first in the batch
         #
         # # split the output
@@ -421,9 +419,9 @@ class Hinet(ImageEmbeddingModule):
 
         if self.pop_up_process:
             pop_up_image(images)
-            pop_up_attention_map(sum(attn_mapsf) / len(attn_mapsf), query_id=0, title='f')
+            # pop_up_attention_map(sum(attn_mapsf) / len(attn_mapsf), query_id=0, title='f')
             pop_up_attention_map(sum(attn_mapsy) / len(attn_mapsy), query_id=0, title='y')
-            pop_up_attention_map(sum(attn_mapsf) / len(attn_mapsf), query_id=128, title='f')
+            # pop_up_attention_map(sum(attn_mapsf) / len(attn_mapsf), query_id=128, title='f')
             pop_up_attention_map(sum(attn_mapsy) / len(attn_mapsy), query_id=128, title='y')
         return x, y
 
